@@ -1,11 +1,10 @@
-pub mod parser;
-pub use parser::*;
 
 // use clap::{Arg};
 // use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 use clap::Parser;
+use lava_core::LavaConfig;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -22,7 +21,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    match read_and_parse_yaml(&args.src, &args.out) {
+    match read_and_parse_json(&args.src, &args.out) {
         Ok(_) => {
             println!("✅ Successfully built Mocha test!");
         }
@@ -30,6 +29,17 @@ fn main() {
     }
 }
 
+fn read_and_parse_json(file_path: &str, out_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Open and read the YAML file
+    let mut file = File::open(file_path)?;
+
+    // Parse JSON into your Config struct
+    let config: LavaConfig = serde_json::from_reader(file)?;
+    println!("{:?}", config);
+    let mut file = File::create(out_path)?;
+    file.write_all(config.to_mocha().as_bytes())?;
+    Ok(())
+}
 
 fn read_and_parse_yaml(file_path: &str, out_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Open and read the YAML file

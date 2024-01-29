@@ -33,6 +33,9 @@ impl LavaWallet {
     fn to_mocha_account(&self) -> String {
         format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
     }
+    fn to_key_value(&self) -> String {
+        format!("{}: {}.publicKey", self.name.to_case(Case::Snake), self.name.to_case(Case::Snake))
+    }
 }
 
 impl Default for LavaWallet {
@@ -57,6 +60,9 @@ pub struct LavaMint {
 impl LavaMint {
     fn to_mocha_account(&self) -> String {
         format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+    }
+    fn to_key_value(&self) -> String {
+        format!("{}: {}.publicKey", self.name.to_case(Case::Snake), self.name.to_case(Case::Snake))
     }
 }
 
@@ -93,6 +99,10 @@ impl LavaATA {
                 self.authority.to_case(Case::Snake)
             )
         }
+    }
+
+    fn to_key_value(&self) -> String {
+        self.name.to_case(Case::Snake)
     }
 }
 
@@ -158,6 +168,10 @@ impl LavaPDA {
             }  ).collect::<Vec<String>>().join(", "),
             self.program.to_case(Case::Snake)
         )
+    }
+
+    fn to_key_value(&self) -> String {
+        self.name.to_case(Case::Snake)
     }
 }
 
@@ -242,19 +256,30 @@ impl LavaConfig {
 
     #[wasm_bindgen]
     pub fn to_mocha(&self) -> String {
-        let accounts: String = vec![
+        let mut accounts: Vec<String> = vec![];
+        let accounts_declarations: String = vec![
             // TODO: Add setup for multiple programs
             // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.wallets.iter().map(|(_,w)| w.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.mints.iter().map(|(_,m)| m.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.pdas.iter().map(|(_,p)| p.to_mocha_account(&self.wallets)).collect::<Vec<String>>().join("\n"),
+            self.wallets.iter().map(|(_,w)| {
+                accounts.push(w.to_key_value());
+                return w.to_mocha_account()}
+            ).collect::<Vec<String>>().join("\n"),
+            self.mints.iter().map(|(_,m)| {
+                accounts.push(m.to_key_value());
+                return m.to_mocha_account()}).collect::<Vec<String>>().join("\n"),
+            self.pdas.iter().map(|(_,p)| {
+                accounts.push(p.to_key_value());
+                return p.to_mocha_account(&self.wallets)}).collect::<Vec<String>>().join("\n"),
             self.atas.iter().map(|(_,a)| {
+                accounts.push(a.to_key_value());
                 if !self.wallets.contains_key(&a.authority) {
                     a.to_mocha_account(true)
                 } else {
                     a.to_mocha_account(false)
                 }
             }).collect::<Vec<String>>().join("\n"),
+            format!("const accounts = {{\n{}\n}}", accounts.join(",\n"))
+        
         ].join("\n");
 
         let setup = "";
@@ -292,7 +317,7 @@ describe("{}", () => {{
         let instructions = [
             {}
         ];
-}})"#, self.name, accounts, setup)
+}})"#, self.name, accounts_declarations, setup)
         // wallets, airdrops, tokens, atas, mints)
     }
 

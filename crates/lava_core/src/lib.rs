@@ -1,14 +1,175 @@
+use std::collections::HashMap;
+
+use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use anyhow::{Result, Error};
 use serde::{Serialize, Deserialize};
+use convert_case::{Case, Casing};
+
+use crate::seeds::LavaSeed;
+
+pub mod seeds;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaConfigJSON {
+    name: String,
+    accounts: Vec<Value>
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaProgram {
+    name: String,
+    #[serde(default = "anchor_program")]
+    address: String
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaWallet {
+    name: String,
+    balance: u64
+}
+
+impl LavaWallet {
+    fn to_mocha_account(&self) -> String {
+        format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+    }
+}
+
+impl Default for LavaWallet {
+    fn default() -> Self {
+        LavaWallet {
+            name: "anchorProvider".to_string(),
+            balance: u64::MAX
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaMint {
+    name: String,
+    symbol: String,
+    decimals: u8,
+    #[serde(default = "anchor_provider")]
+    mint_authority: String,
+    freeze_authority: Option<LavaWallet>
+}
+
+impl LavaMint {
+    fn to_mocha_account(&self) -> String {
+        format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+    }
+}
+
+fn anchor_provider() -> String {
+    "provider".to_string()
+}
+
+fn anchor_program() -> String {
+    "program".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaATA {
+    name: String,
+    authority: String,
+    mint: String,
+    amount: u64
+}
+
+impl LavaATA {
+    fn to_mocha_account(&self, pda_owner: bool) -> String {
+        if pda_owner {
+            format!(
+                "const {} = getAssociatedTokenAddressSync({}.publicKey, {});", 
+                self.name.to_case(Case::Snake),
+                self.mint.to_case(Case::Snake),
+                self.authority.to_case(Case::Snake)
+            )
+        } else {
+            format!(
+                "const {} = getAssociatedTokenAddressSync({}.publicKey, {}.publicKey);", 
+                self.name.to_case(Case::Snake),
+                self.mint.to_case(Case::Snake),
+                self.authority.to_case(Case::Snake)
+            )
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaPDA {
+    name: String,
+    program: String,
+    seeds: Vec<LavaSeed>
+}
+
+#[derive(Deserialize)]
+struct LavaSeedJSON {
+    kind: String,
+    value: Value
+}
+
+#[derive(Deserialize)]
+pub struct LavaPDAJSON {
+    name: String,
+    program: String,
+    seeds: Vec<LavaSeedJSON>
+}
+
+impl LavaPDA {
+    pub fn from_json(v: &[u8]) -> Result<Self, Error> {
+        let lss: LavaPDAJSON = serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
+        let seeds = vec![];
+        lss.seeds.iter().map(|s| {
+            match s.kind.as_str() {
+                "u8" => Ok(LavaSeed::U8(s.value.as_u64().ok_or(Error::msg("Invalid u8"))? as u8)),
+                "i8" => Ok(LavaSeed::I8(s.value.as_i64().ok_or(Error::msg("Invalid i8"))? as i8)),
+                "u16" => Ok(LavaSeed::U16(s.value.as_u64().ok_or(Error::msg("Invalid u16"))? as u16)),
+                "i16" => Ok(LavaSeed::I16(s.value.as_i64().ok_or(Error::msg("Invalid i16"))? as i16)),
+                "u32" => Ok(LavaSeed::U32(s.value.as_u64().ok_or(Error::msg("Invalid u32"))? as u32)),
+                "i32" => Ok(LavaSeed::I32(s.value.as_i64().ok_or(Error::msg("Invalid i32"))? as i32)),
+                "u64" => Ok(LavaSeed::U64(s.value.as_u64().ok_or(Error::msg("Invalid u64"))?)),
+                "i64" => Ok(LavaSeed::I64(s.value.as_i64().ok_or(Error::msg("Invalid i64"))?)),
+                "String" => Ok(LavaSeed::String(s.value.as_str().ok_or(Error::msg("Invalid String"))?.to_string())),
+                "Pubkey" => Ok(LavaSeed::PublicKey(s.value.as_str().ok_or(Error::msg("Invalid Public Key"))?.to_string())),
+                _ => return Err(Error::msg("Unsupported PDA seed type"))
+            }
+        }).collect::<Result<Vec<LavaSeed>, Error>>()?;
+
+        Ok(LavaPDA {
+            name: lss.name,
+            program: lss.program,
+            seeds
+        })
+    }
+    
+    pub fn to_mocha_account(&self, wallets: &HashMap<String, LavaWallet>) -> String {
+        format!(
+            "const {} = PublicKey.findProgramAddressSync([{}], {})[0]", 
+            self.name.to_case(Case::Snake),
+            self.seeds.iter().map(|s| {
+                if let LavaSeed::PublicKey(p) = s {
+                    if !wallets.contains_key(p) {
+                        return s.to_mocha_account(true)
+                    }
+                }
+                s.to_mocha_account(false)
+            }  ).collect::<Vec<String>>().join(", "),
+            self.program.to_case(Case::Snake)
+        )
+    }
+}
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaConfig {
-    pub name: String,
-    pub programs: Vec<Program>,
-    pub wallets: Vec<Wallet>,
-    pub tokens: Vec<Token>,
+    name: String,
+    wallets: HashMap<String, LavaWallet>,
+    mints: HashMap<String, LavaMint>,
+    atas: HashMap<String, LavaATA>,
+    programs: HashMap<String, LavaProgram>,
+    pdas: HashMap<String, LavaPDA>
 }
 
 impl TryFrom<&str> for LavaConfig {
@@ -21,57 +182,117 @@ impl TryFrom<&str> for LavaConfig {
     }
 }
 
+impl TryFrom<&LavaConfigJSON> for LavaConfig {
+    type Error = Error;
+
+    fn try_from(value: &LavaConfigJSON) -> Result<Self, Error> {
+        let mut wallets = HashMap::new();
+        let mut programs = HashMap::new();
+        let mut pdas = HashMap::new();
+        let mut mints = HashMap::new();
+        let mut atas = HashMap::new();
+
+        for v in &value.accounts {
+            let name = v.get("name").and_then(|n| n.as_str()).ok_or(Error::msg("Account name missing"))?;
+
+            match v.get("kind").and_then(|k| k.as_str()).ok_or(Error::msg("Account kind missing"))? {
+                "program" => {
+                    let program: LavaProgram = serde_json::from_value(v.clone())?;
+                    programs.insert(name.to_string(), program);
+                },
+                "wallet" => {
+                    let wallet: LavaWallet = serde_json::from_value(v.clone())?;
+                    wallets.insert(name.to_string(), wallet);
+                },
+                "mint" => {
+                    let mint: LavaMint = serde_json::from_value(v.clone())?;
+                    mints.insert(name.to_string(), mint);
+                },
+                "pda" => {
+                    let pda = LavaPDA::from_json(v.to_string().as_bytes())?;
+                    pdas.insert(name.to_string(), pda);
+                },
+                "ata" => {
+                    let ata: LavaATA = serde_json::from_value(v.clone())?;
+                    atas.insert(name.to_string(), ata);
+                },
+                _ => {
+                    println!("Not implemented: {}", v.get("kind").unwrap().to_string());
+                }
+            }
+        }
+
+        Ok(LavaConfig {
+            name: value.name.clone(),
+            wallets,
+            mints,
+            atas,
+            programs,
+            pdas,
+        })
+    }
+}
+
+#[wasm_bindgen]
 impl LavaConfig {
-    pub fn check(&self) -> Result<()> {
-        // TODO: Make this actually do checks
-        let y;
-
-        // let wallets = self.wallets.clone();
-        // let tokens = self.tokens.clone();
-
-        // // Ensure wallets don't have any undefined tokens
-        // for wallet in &self.wallets {
-        //     for t in wallet.tokens {
-        //         if !tokens.contains(&t.symbol) {
-        //             return Err(Error::msg(format!("Unknown token: {}", t)));
-        //         }
-        //     }
-        // }
-    
-        // // Ensure tokens don't have any undefined wallets
-        // for token in &self.tokens {
-        //     if let Some(a) = &token.1.authority {
-        //         if a != "*" && !wallets.contains(a) {
-        //             return Err(Error::msg(format!("Unknown authority: {}", a)));
-        //         }
-        //     }
-        // }
+    fn check(&self) -> Result<()> {
+        // TODO: Make this actually check our Schema for problems
         Ok(())
     }
 
+    #[wasm_bindgen]
     pub fn to_mocha(&self) -> String {
-        // let wallets = &self.mocha_generate_wallets();
-        // let airdrops = &self.mocha_generate_airdrops();
-        // let tokens = &self.mocha_generate_tokens();
-        let atas = ""; //&self.mocha_generate_atas();
-        let mints = "";
-        //  &self.mocha_generate_mints();
+        let accounts: String = vec![
+            // TODO: Add setup for multiple programs
+            // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+            self.wallets.iter().map(|(_,w)| w.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+            self.mints.iter().map(|(_,m)| m.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+            self.pdas.iter().map(|(_,p)| p.to_mocha_account(&self.wallets)).collect::<Vec<String>>().join("\n"),
+            self.atas.iter().map(|(_,a)| {
+                if !self.wallets.contains_key(&a.authority) {
+                    a.to_mocha_account(true)
+                } else {
+                    a.to_mocha_account(false)
+                }
+            }).collect::<Vec<String>>().join("\n"),
+        ].join("\n");
 
-        format!(r#"describe("setup", async() => {{
-    let instructions = [
+        let setup = "";
 
-    ];
-    // Create wallet keypairs
+        format!(r#"
+describe("{}", () => {{
+    anchor.setProvider(anchor.AnchorProvider.env());
+
+    const provider = anchor.getProvider();
+
+    const connection = provider.connection;
+
+    const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
+
+    const confirm = async (signature: string): Promise<string> => {{
+        const block = await connection.getLatestBlockhash();
+        await connection.confirmTransaction({{
+        signature,
+        ...block,
+        }});
+        return signature;
+    }};
+
+    const log = async (signature: string): Promise<string> => {{
+        console.log(
+        `Your transaction signature: https://explorer.solana.com/transaction/${{signature}}?cluster=custom&customUrl=${{connection.rpcEndpoint}}`
+        );
+        return signature;
+    }};
+
+    // Accounts
     {}
-    // Airdrop SOL
-    {}
-    // Create Tokens
-    {}
-    // Create ATAs
-    {}
-    // Mint tokens to ATAs
-    {}
-}})"#, "", "", "", "", "")
+
+    it("setup", async() => {{
+        let instructions = [
+            {}
+        ];
+}})"#, self.name, accounts, setup)
         // wallets, airdrops, tokens, atas, mints)
     }
 
@@ -140,110 +361,110 @@ impl LavaConfig {
 #[wasm_bindgen]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Wallet {
-    pub name: String,
-    pub address: Option<String>,
-    pub sol_balance: u64,
-    pub tokens: Vec<TokenBalance>
+    name: String,
+    address: Option<String>,
+    sol_balance: u64,
+    tokens: Vec<TokenBalance>
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TokenBalance {
-    pub amount: u64,
-    pub symbol: String
+    amount: u64,
+    symbol: String
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Token {
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
+    name: String,
+    symbol: String,
+    decimals: u8,
     #[serde(rename = "mintAuthority")]
-    pub mint_authority: Option<String>,
+    mint_authority: Option<String>,
     #[serde(rename = "freezeAuthority")]
-    pub freeze_authority: Option<String>,
+    freeze_authority: Option<String>,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Field {
-    pub name: String,
+    name: String,
     #[serde(rename = "type")]
-    pub field_type: String,
+    field_type: String
 }
 
-#[wasm_bindgen]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Account {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub of_type: AccountType
-}
+// #[wasm_bindgen]
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct LavaAccount {
+//     name: String,
+//     kind: String,
+//     initialize: Option<bool>,
+//     balance: Option<u64>,
+//     amount: Option<u64>,
+//     mint: Option<String>,
+//     mint_authority: Option<String>,
+//     freeze_authority: Option<String>,
+//     symbol: Option<String>,
+//     decimals: Option<u8>
+// }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
-    pub name: String,
+    name: String,
     #[serde(rename = "isMut")]
-    pub is_mut: bool,
-        #[serde(rename = "isSigner")]
-    pub is_signer: bool
+    is_mut: bool,
+    #[serde(rename = "isSigner")]
+    is_signer: bool
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountType { 
-    pub fields: Vec<Field>, 
-    pub kind: String 
+    fields: Vec<Field>, 
+    kind: String 
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Argument {
-    pub name: String,
+    name: String,
     #[serde(rename = "type")]
-    pub of_type: String,
+    of_type: String,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instruction {
-    pub accounts: Vec<AccountInfo>,
-    pub args: Vec<Argument>,
-    pub name: String,
+    accounts: Vec<AccountInfo>,
+    args: Vec<Argument>,
+    name: String,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
-    pub address: Option<String>,
-}
-
-#[wasm_bindgen]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Program {
-    pub accounts: Vec<Account>,
-    pub instructions: Vec<Instruction>,
-    pub metadata: Option<Metadata>,
-    pub name: String,
-    pub version: String,
+    address: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LavaConfig;
+    use crate::{LavaConfig, LavaConfigJSON};
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{Read, Write};
 
     #[test]
     fn test_parse() {
-        let file_name = "TBW2023.json";
+        let file_name = "../../Escrow2024.json";
         let mut file = File::open(file_name).unwrap();
         let mut buffer = String::new();
         file.read_to_string(&mut buffer).unwrap();
-        let config = LavaConfig::try_from(buffer.as_str()).unwrap();
+        let lava_config_json: LavaConfigJSON = serde_json::from_slice(buffer.as_bytes()).unwrap();
+        let config = LavaConfig::try_from(&lava_config_json).unwrap();
         let mocha = config.to_mocha();
+        let mut tests = File::create("../../test.mocha.ts").unwrap();
+        tests.write_all(&mocha.as_bytes()).unwrap();
         println!("{}", mocha);
     }
 }

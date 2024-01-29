@@ -1,0 +1,324 @@
+{
+  "name": "Escrow",
+  "accounts": [
+    {
+      "name": "Maker",
+      "balance": 10,
+      "kind": "wallet"
+    },
+    {
+      "name": "Taker",
+      "balance": 10,
+      "kind": "wallet"
+    },
+    {
+      "name": "TokenA",
+      "symbol": "TKA",
+      "decimals": 6,
+      "kind": "mint"
+    },
+    {
+      "name": "Token B",
+      "symbol": "TKB",
+      "decimals": 6,
+      "kind": "mint"
+    },
+    {
+      "name": "anchor_escrow_2024",
+      "kind": "program"
+    },
+    {
+      "amount": 1000000000,
+      "name": "Maker ATA A",
+      "authority": "Maker",
+      "mint": "TokenA",
+      "kind": "ata"
+    },
+    {
+      "amount": 0,
+      "name": "Taker ATA A",
+      "authority": "Taker",
+      "mint": "TokenA",
+      "init": true,
+      "kind": "ata"
+    },
+    {
+      "amount": 1000000000,
+      "name": "Taker ATA B",
+      "authority": "Taker",
+      "mint": "Token B",
+      "kind": "ata"
+    },
+    {
+      "amount": 0,
+      "name": "Maker ATA B",
+      "authority": "Maker",
+      "mint": "Token B",
+      "kind": "ata"
+    },
+    {
+      "name": "Escrow",
+      "seeds": [
+        {
+          "value": "escrow",
+          "kind": "String"
+        },
+        {
+          "value": "Maker",
+          "kind": "Pubkey"
+        },
+        {
+          "value": 1,
+          "kind": "u64"
+        }
+      ],
+      "kind": "pda",
+      "program": "anchor_escrow_2024"
+    }
+  ],
+  "tests": [
+    {
+      "name": "Make",
+      "programId": "anchor_escrow_2024",
+      "instruction": "make",
+      "accounts": {
+        "maker": "Maker",
+        "escrow": "Escrow",
+        "mintA": "TokenA",
+        "mintB": "Token B",
+        "makerAtaA": "Maker ATA A",
+        "vault": "Vault",
+        "tokenProgram": "tokenProgram",
+        "associatedTokenProgram": "associatedTokenProgram",
+        "systemProgram": "systemProgram"
+      },
+      "args": [
+        "1",
+        "1000000",
+        "1000000"
+      ]
+    }
+  ],
+  "idls": [
+    {
+      "version": "0.1.0",
+      "name": "anchor_escrow_2024",
+      "instructions": [
+        {
+          "name": "make",
+          "accounts": [
+            {
+              "name": "maker",
+              "isMut": true,
+              "isSigner": true
+            },
+            {
+              "name": "escrow",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "mintA",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "mintB",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "makerAtaA",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "vault",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "tokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "associatedTokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "systemProgram",
+              "isMut": false,
+              "isSigner": false
+            }
+          ],
+          "args": [
+            {
+              "name": "seed",
+              "type": "u64"
+            },
+            {
+              "name": "deposit",
+              "type": "u64"
+            },
+            {
+              "name": "amount",
+              "type": "u64"
+            }
+          ]
+        },
+        {
+          "name": "refund",
+          "accounts": [
+            {
+              "name": "maker",
+              "isMut": true,
+              "isSigner": true
+            },
+            {
+              "name": "escrow",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "mintA",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "makerAtaA",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "vault",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "tokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "associatedTokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "systemProgram",
+              "isMut": false,
+              "isSigner": false
+            }
+          ],
+          "args": []
+        },
+        {
+          "name": "take",
+          "accounts": [
+            {
+              "name": "taker",
+              "isMut": true,
+              "isSigner": true
+            },
+            {
+              "name": "maker",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "escrow",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "mintA",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "mintB",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "makerAtaB",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "takerAtaA",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "takerAtaB",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "vault",
+              "isMut": true,
+              "isSigner": false
+            },
+            {
+              "name": "tokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "associatedTokenProgram",
+              "isMut": false,
+              "isSigner": false
+            },
+            {
+              "name": "systemProgram",
+              "isMut": false,
+              "isSigner": false
+            }
+          ],
+          "args": []
+        }
+      ],
+      "accounts": [
+        {
+          "name": "Escrow",
+          "type": {
+            "kind": "struct",
+            "fields": [
+              {
+                "name": "seed",
+                "type": "u64"
+              },
+              {
+                "name": "mintA",
+                "type": "publicKey"
+              },
+              {
+                "name": "mintB",
+                "type": "publicKey"
+              },
+              {
+                "name": "amount",
+                "type": "u64"
+              },
+              {
+                "name": "bump",
+                "type": "u8"
+              },
+              {
+                "name": "vaultBump",
+                "type": "u8"
+              }
+            ]
+          }
+        }
+      ],
+      "metadata": {
+        "address": "G7kimRDTrt6Dnh86SKyECSobMq6sT3bbWhgK2T9UX6cN"
+      }
+    }
+  ],
+  "version": "0.0.0"
+}

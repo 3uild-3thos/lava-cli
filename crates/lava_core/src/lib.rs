@@ -1,10 +1,11 @@
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 
 use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
+use soda_sol::IDL;
 
 use crate::seeds::LavaSeed;
 
@@ -15,6 +16,8 @@ pub struct LavaConfigJSON {
     name: String,
     accounts: Vec<Value>,
     tests: Vec<LavaTest>,
+    idls: Vec<IDL>,
+    version: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -234,6 +237,7 @@ pub struct LavaConfig {
     programs: HashMap<String, LavaProgram>,
     pdas: HashMap<String, LavaPDA>,
     tests: Vec<LavaTest>,
+    idls: Vec<IDL>,
 }
 
 impl TryFrom<&str> for LavaConfig {
@@ -293,6 +297,7 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
             }
         }
         let tests = value.tests.clone();
+        let idls: Vec<IDL> = value.idls.clone();
         Ok(LavaConfig {
             name: value.name.clone(),
             wallets,
@@ -301,6 +306,7 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
             programs,
             pdas,
             tests,
+            idls,
         })
     }
 }
@@ -365,7 +371,10 @@ impl LavaConfig {
             .tests
             .iter()
             .map(|t| {
-                format!(r#"it("{}", async() => {{
+                let idl = self.idls.iter().find(|i| i.name == t.programId).unwrap();
+                let instruction = idl.instructions.iter().find(|i| i.name == t.instruction).unwrap(); 
+
+            return     format!(r#"it("{}", async() => {{
                 const accounts = {}
                 await program.methods
                 .{}({})
@@ -384,14 +393,14 @@ impl LavaConfig {
             }
             ).collect::<Vec<String>>().join(", "),
             t.instruction,
-            t.args.iter().map(|a| {
+            t.args.iter().enumerate().map(|(i,a)| {
                 dbg!(a);
-                match a {
+                return match &instruction.args[i].type_ {
 
-                    Value::String(s) => format!("'{}'", s),
-                    Value::Number(n) => format!("{}", n),
+                    soda_sol::structs::InstructionType::U64 => {
+                        return format!("new BN({})",format!("{}", a).replace('"', ""))},
                     _ => "null".to_string()
-                }
+                };
             }).collect::<Vec<String>>().join(", "))
             })
             .collect::<Vec<String>>()
@@ -401,21 +410,23 @@ impl LavaConfig {
 
         format!(
             r#"
-describe("{}", () => {{
-    anchor.setProvider(anchor.AnchorProvider.env());
+import * as anchor from "@coral-xyz/anchor";
+import {{ Program, BN }} from "@coral-xyz/anchor";
+    describe("{}", () => {{
+        anchor.setProvider(anchor.AnchorProvider.env());
 
-    const provider = anchor.getProvider();
+        const provider = anchor.getProvider();
 
-    const connection = provider.connection;
+        const connection = provider.connection;
 
-    const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
+        const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
 
-    const confirm = async (signature: string): Promise<string> => {{
-        const block = await connection.getLatestBlockhash();
-        await connection.confirmTransaction({{
-        signature,
-        ...block,
-        }});
+        const confirm = async (signature: string): Promise<string> => {{
+            const block = await connection.getLatestBlockhash();
+            await connection.confirmTransaction({{
+                signature,
+                ...block,
+            }});
         return signature;
     }};
 

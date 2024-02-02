@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use serde_json::Value;
-use wasm_bindgen::prelude::*;
-use anyhow::{Result, Error};
-use serde::{Serialize, Deserialize};
+use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use soda_sol::IDL;
+use wasm_bindgen::prelude::*;
 
 use crate::seeds::LavaSeed;
 
@@ -13,25 +14,44 @@ pub mod seeds;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaConfigJSON {
     name: String,
-    accounts: Vec<Value>
+    accounts: Vec<Value>,
+    tests: Vec<LavaTest>,
+    idls: Vec<IDL>,
+    version: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaTest {
+    name: String,
+    programId: String,
+    instruction: String,
+    accounts: Value,
+    args: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaProgram {
     name: String,
     #[serde(default = "anchor_program")]
-    address: String
+    address: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaWallet {
     name: String,
-    balance: u64
+    balance: u64,
 }
 
 impl LavaWallet {
     fn to_mocha_account(&self) -> String {
         format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+    }
+    fn to_key_value(&self) -> String {
+        format!(
+            "{}: {}.publicKey",
+            self.name.to_case(Case::Snake),
+            self.name.to_case(Case::Snake)
+        )
     }
 }
 
@@ -39,7 +59,7 @@ impl Default for LavaWallet {
     fn default() -> Self {
         LavaWallet {
             name: "anchorProvider".to_string(),
-            balance: u64::MAX
+            balance: u64::MAX,
         }
     }
 }
@@ -51,12 +71,19 @@ pub struct LavaMint {
     decimals: u8,
     #[serde(default = "anchor_provider")]
     mint_authority: String,
-    freeze_authority: Option<LavaWallet>
+    freeze_authority: Option<LavaWallet>,
 }
 
 impl LavaMint {
     fn to_mocha_account(&self) -> String {
         format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+    }
+    fn to_key_value(&self) -> String {
+        format!(
+            "{}: {}.publicKey",
+            self.name.to_case(Case::Snake),
+            self.name.to_case(Case::Snake)
+        )
     }
 }
 
@@ -73,91 +100,130 @@ pub struct LavaATA {
     name: String,
     authority: String,
     mint: String,
-    amount: u64
+    amount: u64,
 }
 
 impl LavaATA {
     fn to_mocha_account(&self, pda_owner: bool) -> String {
         if pda_owner {
             format!(
-                "const {} = getAssociatedTokenAddressSync({}.publicKey, {});", 
+                "const {} = getAssociatedTokenAddressSync({}.publicKey, {});",
                 self.name.to_case(Case::Snake),
                 self.mint.to_case(Case::Snake),
                 self.authority.to_case(Case::Snake)
             )
         } else {
             format!(
-                "const {} = getAssociatedTokenAddressSync({}.publicKey, {}.publicKey);", 
+                "const {} = getAssociatedTokenAddressSync({}.publicKey, {}.publicKey);",
                 self.name.to_case(Case::Snake),
                 self.mint.to_case(Case::Snake),
                 self.authority.to_case(Case::Snake)
             )
         }
     }
-}
 
+    fn to_key_value(&self) -> String {
+        self.name.to_case(Case::Snake)
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaPDA {
     name: String,
     program: String,
-    seeds: Vec<LavaSeed>
+    seeds: Vec<LavaSeed>,
 }
 
 #[derive(Deserialize)]
 struct LavaSeedJSON {
     kind: String,
-    value: Value
+    value: Value,
 }
 
 #[derive(Deserialize)]
 pub struct LavaPDAJSON {
     name: String,
     program: String,
-    seeds: Vec<LavaSeedJSON>
+    seeds: Vec<LavaSeedJSON>,
 }
 
 impl LavaPDA {
     pub fn from_json(v: &[u8]) -> Result<Self, Error> {
-        let lss: LavaPDAJSON = serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
+        let lss: LavaPDAJSON =
+            serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
         let seeds = vec![];
-        lss.seeds.iter().map(|s| {
-            match s.kind.as_str() {
-                "u8" => Ok(LavaSeed::U8(s.value.as_u64().ok_or(Error::msg("Invalid u8"))? as u8)),
-                "i8" => Ok(LavaSeed::I8(s.value.as_i64().ok_or(Error::msg("Invalid i8"))? as i8)),
-                "u16" => Ok(LavaSeed::U16(s.value.as_u64().ok_or(Error::msg("Invalid u16"))? as u16)),
-                "i16" => Ok(LavaSeed::I16(s.value.as_i64().ok_or(Error::msg("Invalid i16"))? as i16)),
-                "u32" => Ok(LavaSeed::U32(s.value.as_u64().ok_or(Error::msg("Invalid u32"))? as u32)),
-                "i32" => Ok(LavaSeed::I32(s.value.as_i64().ok_or(Error::msg("Invalid i32"))? as i32)),
-                "u64" => Ok(LavaSeed::U64(s.value.as_u64().ok_or(Error::msg("Invalid u64"))?)),
-                "i64" => Ok(LavaSeed::I64(s.value.as_i64().ok_or(Error::msg("Invalid i64"))?)),
-                "String" => Ok(LavaSeed::String(s.value.as_str().ok_or(Error::msg("Invalid String"))?.to_string())),
-                "Pubkey" => Ok(LavaSeed::PublicKey(s.value.as_str().ok_or(Error::msg("Invalid Public Key"))?.to_string())),
-                _ => return Err(Error::msg("Unsupported PDA seed type"))
-            }
-        }).collect::<Result<Vec<LavaSeed>, Error>>()?;
+        lss.seeds
+            .iter()
+            .map(|s| match s.kind.as_str() {
+                "u8" => Ok(LavaSeed::U8(
+                    s.value.as_u64().ok_or(Error::msg("Invalid u8"))? as u8,
+                )),
+                "i8" => Ok(LavaSeed::I8(
+                    s.value.as_i64().ok_or(Error::msg("Invalid i8"))? as i8,
+                )),
+                "u16" => Ok(LavaSeed::U16(
+                    s.value.as_u64().ok_or(Error::msg("Invalid u16"))? as u16,
+                )),
+                "i16" => Ok(LavaSeed::I16(
+                    s.value.as_i64().ok_or(Error::msg("Invalid i16"))? as i16,
+                )),
+                "u32" => Ok(LavaSeed::U32(
+                    s.value.as_u64().ok_or(Error::msg("Invalid u32"))? as u32,
+                )),
+                "i32" => Ok(LavaSeed::I32(
+                    s.value.as_i64().ok_or(Error::msg("Invalid i32"))? as i32,
+                )),
+                "u64" => Ok(LavaSeed::U64(
+                    s.value.as_u64().ok_or(Error::msg("Invalid u64"))?,
+                )),
+                "i64" => Ok(LavaSeed::I64(
+                    s.value.as_i64().ok_or(Error::msg("Invalid i64"))?,
+                )),
+                "String" => Ok(LavaSeed::String(
+                    s.value
+                        .as_str()
+                        .ok_or(Error::msg("Invalid String"))?
+                        .to_string(),
+                )),
+                "Pubkey" => Ok(LavaSeed::PublicKey(
+                    s.value
+                        .as_str()
+                        .ok_or(Error::msg("Invalid Public Key"))?
+                        .to_string(),
+                )),
+                _ => return Err(Error::msg("Unsupported PDA seed type")),
+            })
+            .collect::<Result<Vec<LavaSeed>, Error>>()?;
 
         Ok(LavaPDA {
             name: lss.name,
             program: lss.program,
-            seeds
+            seeds,
         })
     }
-    
+
     pub fn to_mocha_account(&self, wallets: &HashMap<String, LavaWallet>) -> String {
         format!(
-            "const {} = PublicKey.findProgramAddressSync([{}], {})[0]", 
+            "const {} = PublicKey.findProgramAddressSync([{}], {})[0]",
             self.name.to_case(Case::Snake),
-            self.seeds.iter().map(|s| {
-                if let LavaSeed::PublicKey(p) = s {
-                    if !wallets.contains_key(p) {
-                        return s.to_mocha_account(true)
+            self.seeds
+                .iter()
+                .map(|s| {
+                    if let LavaSeed::PublicKey(p) = s {
+                        if !wallets.contains_key(p) {
+                            return s.to_mocha_account(true);
+                        }
                     }
-                }
-                s.to_mocha_account(false)
-            }  ).collect::<Vec<String>>().join(", "),
+                    s.to_mocha_account(false)
+                })
+                .collect::<Vec<String>>()
+                .join(", "),
             self.program.to_case(Case::Snake)
         )
+    }
+
+    fn to_key_value(&self) -> String {
+        self.name.to_case(Case::Snake)
     }
 }
 
@@ -169,7 +235,9 @@ pub struct LavaConfig {
     mints: HashMap<String, LavaMint>,
     atas: HashMap<String, LavaATA>,
     programs: HashMap<String, LavaProgram>,
-    pdas: HashMap<String, LavaPDA>
+    pdas: HashMap<String, LavaPDA>,
+    tests: Vec<LavaTest>,
+    idls: Vec<IDL>,
 }
 
 impl TryFrom<&str> for LavaConfig {
@@ -193,35 +261,43 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
         let mut atas = HashMap::new();
 
         for v in &value.accounts {
-            let name = v.get("name").and_then(|n| n.as_str()).ok_or(Error::msg("Account name missing"))?;
+            let name = v
+                .get("name")
+                .and_then(|n| n.as_str())
+                .ok_or(Error::msg("Account name missing"))?;
 
-            match v.get("kind").and_then(|k| k.as_str()).ok_or(Error::msg("Account kind missing"))? {
+            match v
+                .get("kind")
+                .and_then(|k| k.as_str())
+                .ok_or(Error::msg("Account kind missing"))?
+            {
                 "program" => {
                     let program: LavaProgram = serde_json::from_value(v.clone())?;
                     programs.insert(name.to_string(), program);
-                },
+                }
                 "wallet" => {
                     let wallet: LavaWallet = serde_json::from_value(v.clone())?;
                     wallets.insert(name.to_string(), wallet);
-                },
+                }
                 "mint" => {
                     let mint: LavaMint = serde_json::from_value(v.clone())?;
                     mints.insert(name.to_string(), mint);
-                },
+                }
                 "pda" => {
                     let pda = LavaPDA::from_json(v.to_string().as_bytes())?;
                     pdas.insert(name.to_string(), pda);
-                },
+                }
                 "ata" => {
                     let ata: LavaATA = serde_json::from_value(v.clone())?;
                     atas.insert(name.to_string(), ata);
-                },
+                }
                 _ => {
                     println!("Not implemented: {}", v.get("kind").unwrap().to_string());
                 }
             }
         }
-
+        let tests = value.tests.clone();
+        let idls: Vec<IDL> = value.idls.clone();
         Ok(LavaConfig {
             name: value.name.clone(),
             wallets,
@@ -229,6 +305,8 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
             atas,
             programs,
             pdas,
+            tests,
+            idls,
         })
     }
 }
@@ -242,39 +320,122 @@ impl LavaConfig {
 
     #[wasm_bindgen]
     pub fn to_mocha(&self) -> String {
-        let accounts: String = vec![
-            // TODO: Add setup for multiple programs
-            // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.wallets.iter().map(|(_,w)| w.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.mints.iter().map(|(_,m)| m.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.pdas.iter().map(|(_,p)| p.to_mocha_account(&self.wallets)).collect::<Vec<String>>().join("\n"),
-            self.atas.iter().map(|(_,a)| {
-                if !self.wallets.contains_key(&a.authority) {
-                    a.to_mocha_account(true)
-                } else {
-                    a.to_mocha_account(false)
-                }
-            }).collect::<Vec<String>>().join("\n"),
-        ].join("\n");
+        let mut accounts: Vec<String> = vec![];
+        let mut accounts_declarations: Vec<String> = vec![];
+        // TODO: Add setup for multiple programs
+        // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+        self.wallets.iter().map(|(_, w)| {
+            accounts.push(w.to_key_value());
+            accounts_declarations.push(w.to_mocha_account());
+        });
+        self.mints.iter().map(|(_, m)| {
+            accounts.push(m.to_key_value());
+            accounts_declarations.push(m.to_mocha_account());
+        });
+        self.pdas.iter().map(|(_, p)| {
+            accounts.push(p.to_key_value());
+            accounts_declarations.push(p.to_mocha_account(&self.wallets));
+        });
+        self.atas.iter().map(|(_, a)| {
+            accounts.push(a.to_key_value());
+            accounts_declarations.push(if !self.wallets.contains_key(&a.authority) {
+                a.to_mocha_account(true)
+            } else {
+                a.to_mocha_account(false)
+            })
+        });
+        let accounts_part = format!(
+            "{}\n{}",
+            accounts_declarations.join("\n"),
+            format!(
+                "const accountsPublicKeys = {{\n{}\n}}",
+                accounts.join(",\n")
+            )
+        );
+
+        let user_defined_tests = self
+            .tests
+            .iter()
+            .map(|t| {
+                let idl = self.idls.iter().find(|i| i.name == t.programId).unwrap();
+                let instruction = idl
+                    .instructions
+                    .iter()
+                    .find(|i| i.name == t.instruction)
+                    .unwrap();
+                let binding = format!("{}", t.accounts).replace('"', "");
+                let mut accounts_to_chars = binding.chars();
+                accounts_to_chars.next();
+                accounts_to_chars.next_back();
+                let account_display = accounts_to_chars
+                    .collect::<String>()
+                    .split(',')
+                    .map(|pair| {
+                        let key_value = pair.split(':').collect::<Vec<&str>>();
+                        let key = key_value[0];
+                        let value = key_value[1];
+                        return format!(
+                            "{}: accountsPublicKeys[{}]",
+                            key,
+                            value.to_case(Case::Snake)
+                        );
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                return format!(
+                    r#"it("{}", async() => {{
+                const accounts = {{{}}}
+                await program.methods
+                .{}({})
+                .accounts({{ ...accounts }})
+                .signers([])
+                .rpc()
+                .then(confirm)
+                .then(log);
+            }});"#,
+                    t.name,
+                    account_display,
+                    t.instruction,
+                    t.args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| {
+                            dbg!(a);
+                            return match &instruction.args[i].type_ {
+                                soda_sol::structs::InstructionType::U64 => {
+                                    return format!("new BN({})", format!("{}", a).replace('"', ""))
+                                }
+                                _ => "null".to_string(),
+                            };
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
 
         let setup = "";
 
-        format!(r#"
-describe("{}", () => {{
-    anchor.setProvider(anchor.AnchorProvider.env());
+        format!(
+            r#"
+import * as anchor from "@coral-xyz/anchor";
+import {{ Program, BN }} from "@coral-xyz/anchor";
+    describe("{}", () => {{
+        anchor.setProvider(anchor.AnchorProvider.env());
 
-    const provider = anchor.getProvider();
+        const provider = anchor.getProvider();
 
-    const connection = provider.connection;
+        const connection = provider.connection;
 
-    const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
+        const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
 
-    const confirm = async (signature: string): Promise<string> => {{
-        const block = await connection.getLatestBlockhash();
-        await connection.confirmTransaction({{
-        signature,
-        ...block,
-        }});
+        const confirm = async (signature: string): Promise<string> => {{
+            const block = await connection.getLatestBlockhash();
+            await connection.confirmTransaction({{
+                signature,
+                ...block,
+            }});
         return signature;
     }};
 
@@ -292,7 +453,12 @@ describe("{}", () => {{
         let instructions = [
             {}
         ];
-}})"#, self.name, accounts, setup)
+    }})
+
+    {}
+}})"#,
+            self.name, accounts_part, setup, user_defined_tests
+        )
         // wallets, airdrops, tokens, atas, mints)
     }
 
@@ -309,7 +475,6 @@ describe("{}", () => {{
     //         });
     //     format!("const [{}] = [{}]", wallets.join(", "), keypairs.join(", "))
     // }
-    
 
     // fn mocha_generate_airdrops(&self) -> String {
     //     let mut airdrops = vec!["anchor.getProvider().connection.requestAirdrop(lava_master_wallet.publicKey, 100_000_000_000).then(confirmTx)".to_string()];
@@ -364,14 +529,14 @@ pub struct Wallet {
     name: String,
     address: Option<String>,
     sol_balance: u64,
-    tokens: Vec<TokenBalance>
+    tokens: Vec<TokenBalance>,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TokenBalance {
     amount: u64,
-    symbol: String
+    symbol: String,
 }
 
 #[wasm_bindgen]
@@ -391,7 +556,7 @@ pub struct Token {
 pub struct Field {
     name: String,
     #[serde(rename = "type")]
-    field_type: String
+    field_type: String,
 }
 
 // #[wasm_bindgen]
@@ -416,14 +581,14 @@ pub struct AccountInfo {
     #[serde(rename = "isMut")]
     is_mut: bool,
     #[serde(rename = "isSigner")]
-    is_signer: bool
+    is_signer: bool,
 }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccountType { 
-    fields: Vec<Field>, 
-    kind: String 
+pub struct AccountType {
+    fields: Vec<Field>,
+    kind: String,
 }
 
 #[wasm_bindgen]
@@ -465,6 +630,6 @@ mod tests {
         let mocha = config.to_mocha();
         let mut tests = File::create("../../test.mocha.ts").unwrap();
         tests.write_all(&mocha.as_bytes()).unwrap();
-        println!("{}", mocha);
+        //   println!("{}", mocha);
     }
 }

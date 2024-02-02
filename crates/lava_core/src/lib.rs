@@ -4,8 +4,8 @@ use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use wasm_bindgen::prelude::*;
 use soda_sol::IDL;
+use wasm_bindgen::prelude::*;
 
 use crate::seeds::LavaSeed;
 
@@ -321,70 +321,69 @@ impl LavaConfig {
     #[wasm_bindgen]
     pub fn to_mocha(&self) -> String {
         let mut accounts: Vec<String> = vec![];
-        let accounts_declarations: String = vec![
-            // TODO: Add setup for multiple programs
-            // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-            self.wallets
-                .iter()
-                .map(|(_, w)| {
-                    accounts.push(w.to_key_value());
-                    return w.to_mocha_account();
-                })
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.mints
-                .iter()
-                .map(|(_, m)| {
-                    accounts.push(m.to_key_value());
-                    return m.to_mocha_account();
-                })
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.pdas
-                .iter()
-                .map(|(_, p)| {
-                    accounts.push(p.to_key_value());
-                    return p.to_mocha_account(&self.wallets);
-                })
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.atas
-                .iter()
-                .map(|(_, a)| {
-                    accounts.push(a.to_key_value());
-                    if !self.wallets.contains_key(&a.authority) {
-                        a.to_mocha_account(true)
-                    } else {
-                        a.to_mocha_account(false)
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join("\n"),
+        let mut accounts_declarations: Vec<String> = vec![];
+        // TODO: Add setup for multiple programs
+        // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+        self.wallets.iter().map(|(_, w)| {
+            accounts.push(w.to_key_value());
+            accounts_declarations.push(w.to_mocha_account());
+        });
+        self.mints.iter().map(|(_, m)| {
+            accounts.push(m.to_key_value());
+            accounts_declarations.push(m.to_mocha_account());
+        });
+        self.pdas.iter().map(|(_, p)| {
+            accounts.push(p.to_key_value());
+            accounts_declarations.push(p.to_mocha_account(&self.wallets));
+        });
+        self.atas.iter().map(|(_, a)| {
+            accounts.push(a.to_key_value());
+            accounts_declarations.push(if !self.wallets.contains_key(&a.authority) {
+                a.to_mocha_account(true)
+            } else {
+                a.to_mocha_account(false)
+            })
+        });
+        let accounts_part = format!(
+            "{}\n{}",
+            accounts_declarations.join("\n"),
             format!(
                 "const accountsPublicKeys = {{\n{}\n}}",
                 accounts.join(",\n")
-            ),
-        ]
-        .join("\n");
+            )
+        );
 
         let user_defined_tests = self
             .tests
             .iter()
             .map(|t| {
                 let idl = self.idls.iter().find(|i| i.name == t.programId).unwrap();
-                let instruction = idl.instructions.iter().find(|i| i.name == t.instruction).unwrap(); 
-                let binding = format!("{}",t.accounts).replace('"', "");
+                let instruction = idl
+                    .instructions
+                    .iter()
+                    .find(|i| i.name == t.instruction)
+                    .unwrap();
+                let binding = format!("{}", t.accounts).replace('"', "");
                 let mut accounts_to_chars = binding.chars();
                 accounts_to_chars.next();
                 accounts_to_chars.next_back();
-                let account_display = accounts_to_chars.collect::<String>().split(',').map(|pair|{
-                    let key_value = pair.split(':').collect::<Vec<&str>>();
-                    let key = key_value[0];
-                    let value = key_value[1];
-                    return format!("{}: accountsPublicKeys[{}]", key, value.to_case(Case::Snake))
-                }
-                ).collect::<Vec<String>>().join(", ");
-            return     format!(r#"it("{}", async() => {{
+                let account_display = accounts_to_chars
+                    .collect::<String>()
+                    .split(',')
+                    .map(|pair| {
+                        let key_value = pair.split(':').collect::<Vec<&str>>();
+                        let key = key_value[0];
+                        let value = key_value[1];
+                        return format!(
+                            "{}: accountsPublicKeys[{}]",
+                            key,
+                            value.to_case(Case::Snake)
+                        );
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                return format!(
+                    r#"it("{}", async() => {{
                 const accounts = {{{}}}
                 await program.methods
                 .{}({})
@@ -394,18 +393,24 @@ impl LavaConfig {
                 .then(confirm)
                 .then(log);
             }});"#,
-            t.name,
-            account_display,
-            t.instruction,
-            t.args.iter().enumerate().map(|(i,a)| {
-                dbg!(a);
-                return match &instruction.args[i].type_ {
-
-                    soda_sol::structs::InstructionType::U64 => {
-                        return format!("new BN({})",format!("{}", a).replace('"', ""))},
-                    _ => "null".to_string()
-                };
-            }).collect::<Vec<String>>().join(", "))
+                    t.name,
+                    account_display,
+                    t.instruction,
+                    t.args
+                        .iter()
+                        .enumerate()
+                        .map(|(i, a)| {
+                            dbg!(a);
+                            return match &instruction.args[i].type_ {
+                                soda_sol::structs::InstructionType::U64 => {
+                                    return format!("new BN({})", format!("{}", a).replace('"', ""))
+                                }
+                                _ => "null".to_string(),
+                            };
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                );
             })
             .collect::<Vec<String>>()
             .join("\n");
@@ -452,7 +457,7 @@ import {{ Program, BN }} from "@coral-xyz/anchor";
 
     {}
 }})"#,
-            self.name, accounts_declarations, setup, user_defined_tests
+            self.name, accounts_part, setup, user_defined_tests
         )
         // wallets, airdrops, tokens, atas, mints)
     }

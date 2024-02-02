@@ -27,25 +27,9 @@ import { Program, BN } from "@coral-xyz/anchor";
     };
 
     // Accounts
-    const taker = new Keypair();
-const maker = new Keypair();
-const token_b = new Keypair();
-const token_a = new Keypair();
-const escrow = PublicKey.findProgramAddressSync([], anchor_escrow_2024)[0]
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
-const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
-const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
-const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
+    
 const accountsPublicKeys = {
-taker: taker.publicKey,
-maker: maker.publicKey,
-token_b: token_b.publicKey,
-token_a: token_a.publicKey,
-escrow,
-maker_ata_b,
-taker_ata_b,
-taker_ata_a,
-maker_ata_a
+
 }
 
     it("setup", async() => {

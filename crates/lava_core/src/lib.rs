@@ -373,9 +373,19 @@ impl LavaConfig {
             .map(|t| {
                 let idl = self.idls.iter().find(|i| i.name == t.programId).unwrap();
                 let instruction = idl.instructions.iter().find(|i| i.name == t.instruction).unwrap(); 
-
+                let binding = format!("{}",t.accounts).replace('"', "");
+                let mut accounts_to_chars = binding.chars();
+                accounts_to_chars.next();
+                accounts_to_chars.next_back();
+                let account_display = accounts_to_chars.collect::<String>().split(',').map(|pair|{
+                    let key_value = pair.split(':').collect::<Vec<&str>>();
+                    let key = key_value[0];
+                    let value = key_value[1];
+                    return format!("{}: accountsPublicKeys[{}]", key, value.to_case(Case::Snake))
+                }
+                ).collect::<Vec<String>>().join(", ");
             return     format!(r#"it("{}", async() => {{
-                const accounts = {}
+                const accounts = {{{}}}
                 await program.methods
                 .{}({})
                 .accounts({{ ...accounts }})
@@ -385,13 +395,7 @@ impl LavaConfig {
                 .then(log);
             }});"#,
             t.name,
-            format!("{}",t.accounts).replace('"', "").split(',').map(|pair|{
-                let key_value = pair.split(':').collect::<Vec<&str>>();
-                let key = key_value[0];
-                let value = key_value[1];
-                return format!("{}: accountsPublicKeys[{}]", key, value.to_case(Case::Snake))
-            }
-            ).collect::<Vec<String>>().join(", "),
+            account_display,
             t.instruction,
             t.args.iter().enumerate().map(|(i,a)| {
                 dbg!(a);

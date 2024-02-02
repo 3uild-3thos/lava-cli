@@ -27,24 +27,24 @@ import { Program, BN } from "@coral-xyz/anchor";
     };
 
     // Accounts
-    const maker = new Keypair();
-const taker = new Keypair();
-const token_a = new Keypair();
+    const taker = new Keypair();
+const maker = new Keypair();
 const token_b = new Keypair();
+const token_a = new Keypair();
 const escrow = PublicKey.findProgramAddressSync([], anchor_escrow_2024)[0]
+const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
 const accountsPublicKeys = {
-maker: maker.publicKey,
 taker: taker.publicKey,
-token_a: token_a.publicKey,
+maker: maker.publicKey,
 token_b: token_b.publicKey,
+token_a: token_a.publicKey,
 escrow,
+maker_ata_b,
 taker_ata_b,
 taker_ata_a,
-maker_ata_b,
 maker_ata_a
 }
 
@@ -55,7 +55,7 @@ maker_ata_a
     })
 
     it("Make", async() => {
-                const accounts = {associatedTokenProgram: accountsPublicKeys[associated_token_program], escrow: accountsPublicKeys[escrow], maker: accountsPublicKeys[maker], makerAtaA: accountsPublicKeys[maker_ata_a], mintA: accountsPublicKeys[token_a], mintB: accountsPublicKeys[token_b], systemProgram: accountsPublicKeys[system_program], tokenProgram: accountsPublicKeys[token_program], vault: accountsPublicKeys[vault}]
+                const accounts = {associatedTokenProgram: accountsPublicKeys[associated_token_program], escrow: accountsPublicKeys[escrow], maker: accountsPublicKeys[maker], makerAtaA: accountsPublicKeys[maker_ata_a], mintA: accountsPublicKeys[token_a], mintB: accountsPublicKeys[token_b], systemProgram: accountsPublicKeys[system_program], tokenProgram: accountsPublicKeys[token_program], vault: accountsPublicKeys[vault]}
                 await program.methods
                 .make(new BN(1), new BN(1000000), new BN(1000000))
                 .accounts({ ...accounts })

@@ -13,8 +13,20 @@ pub mod seeds;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaConfigJSON {
     name: String,
-    accounts: Vec<Value>
+    accounts: Vec<Value>,
+    tests: Vec<LavaTest>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LavaTest {
+    name: String,
+    programId: String,
+    instruction: String,
+    accounts: Value,
+    args: Vec<Value>
+}
+
+
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LavaProgram {
@@ -183,7 +195,8 @@ pub struct LavaConfig {
     mints: HashMap<String, LavaMint>,
     atas: HashMap<String, LavaATA>,
     programs: HashMap<String, LavaProgram>,
-    pdas: HashMap<String, LavaPDA>
+    pdas: HashMap<String, LavaPDA>,
+    tests: Vec<LavaTest>
 }
 
 impl TryFrom<&str> for LavaConfig {
@@ -235,7 +248,7 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
                 }
             }
         }
-
+        let tests = value.tests.clone();
         Ok(LavaConfig {
             name: value.name.clone(),
             wallets,
@@ -243,6 +256,7 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
             atas,
             programs,
             pdas,
+            tests
         })
     }
 }
@@ -282,6 +296,10 @@ impl LavaConfig {
         
         ].join("\n");
 
+        let user_defined_tests = self.tests.iter().map(|t| {
+            format!("it(\"{}\", async() => {{\n{}\n}})", t.name, t.instruction)
+        }).collect::<Vec<String>>().join("\n");
+
         let setup = "";
 
         format!(r#"
@@ -317,7 +335,10 @@ describe("{}", () => {{
         let instructions = [
             {}
         ];
-}})"#, self.name, accounts_declarations, setup)
+    }})
+
+    {}
+"#, self.name, accounts_declarations, setup, user_defined_tests)
         // wallets, airdrops, tokens, atas, mints)
     }
 

@@ -297,7 +297,15 @@ impl LavaConfig {
         ].join("\n");
 
         let user_defined_tests = self.tests.iter().map(|t| {
-            format!("it(\"{}\", async() => {{\n{}\n}})", t.name, t.instruction)
+            format!(r#"it("{}", async() => {{
+                await program.methods
+                .{}()
+                .accounts({{ ...accounts }})
+                .signers([])
+                .rpc()
+                .then(confirm)
+                .then(log);
+            }});"#, t.name, t.instruction)
         }).collect::<Vec<String>>().join("\n");
 
         let setup = "";
@@ -338,7 +346,7 @@ describe("{}", () => {{
     }})
 
     {}
-"#, self.name, accounts_declarations, setup, user_defined_tests)
+}})"#, self.name, accounts_declarations, setup, user_defined_tests)
         // wallets, airdrops, tokens, atas, mints)
     }
 

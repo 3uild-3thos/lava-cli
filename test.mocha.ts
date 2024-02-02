@@ -31,8 +31,8 @@ const token_a = new Keypair();
 const token_b = new Keypair();
 const escrow = PublicKey.findProgramAddressSync([], anchor_escrow_2024)[0]
 const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
-const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
+const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const accounts = {
 taker: taker.publicKey,
@@ -41,8 +41,8 @@ token_a: token_a.publicKey,
 token_b: token_b.publicKey,
 escrow,
 maker_ata_a,
-taker_ata_b,
 taker_ata_a,
+taker_ata_b,
 maker_ata_b
 }
 
@@ -53,5 +53,12 @@ maker_ata_b
     })
 
     it("Make", async() => {
-make
+                await program.methods
+                .make()
+                .accounts({ ...accounts })
+                .signers([])
+                .rpc()
+                .then(confirm)
+                .then(log);
+            });
 })

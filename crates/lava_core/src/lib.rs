@@ -321,32 +321,53 @@ impl LavaConfig {
     #[wasm_bindgen]
     pub fn to_mocha(&self) -> String {
         let mut accounts: Vec<String> = vec![];
-        let mut accounts_declarations: Vec<String> = vec![];
-        // TODO: Add setup for multiple programs
-        // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
-        self.wallets.iter().map(|(_, w)| {
-            accounts.push(w.to_key_value());
-            accounts_declarations.push(w.to_mocha_account());
-        });
-        self.mints.iter().map(|(_, m)| {
-            accounts.push(m.to_key_value());
-            accounts_declarations.push(m.to_mocha_account());
-        });
-        self.pdas.iter().map(|(_, p)| {
-            accounts.push(p.to_key_value());
-            accounts_declarations.push(p.to_mocha_account(&self.wallets));
-        });
-        self.atas.iter().map(|(_, a)| {
-            accounts.push(a.to_key_value());
-            accounts_declarations.push(if !self.wallets.contains_key(&a.authority) {
-                a.to_mocha_account(true)
-            } else {
-                a.to_mocha_account(false)
-            })
-        });
+
+        let accounts_declarations: String = vec![
+            // TODO: Add setup for multiple programs
+            // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+            self.wallets
+                .iter()
+                .map(|(_, w)| {
+                    accounts.push(w.to_key_value());
+                    return w.to_mocha_account();
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.mints
+                .iter()
+                .map(|(_, m)| {
+                    accounts.push(m.to_key_value());
+                    return m.to_mocha_account();
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.pdas
+                .iter()
+                .map(|(_, p)| {
+                    accounts.push(p.to_key_value());
+                    return p.to_mocha_account(&self.wallets);
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.atas
+                .iter()
+                .map(|(_, a)| {
+                    accounts.push(a.to_key_value());
+                    if !self.wallets.contains_key(&a.authority) {
+                        a.to_mocha_account(true)
+                    } else {
+                        a.to_mocha_account(false)
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+        ]
+
+
+        .join("\n");
         let accounts_part = format!(
             "{}\n{}",
-            accounts_declarations.join("\n"),
+            accounts_declarations,
             format!(
                 "const accountsPublicKeys = {{\n{}\n}}",
                 accounts.join(",\n")

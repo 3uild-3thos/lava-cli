@@ -134,7 +134,7 @@ pub struct LavaPDA {
     seeds: Vec<LavaSeed>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct LavaSeedJSON {
     kind: String,
     value: Value,
@@ -151,8 +151,9 @@ impl LavaPDA {
     pub fn from_json(v: &[u8]) -> Result<Self, Error> {
         let lss: LavaPDAJSON =
             serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
-        let seeds = vec![];
-        lss.seeds
+        let mut seeds = vec![];
+        dbg!(&lss.seeds);
+        seeds = lss.seeds
             .iter()
             .map(|s| match s.kind.as_str() {
                 "u8" => Ok(LavaSeed::U8(
@@ -203,17 +204,19 @@ impl LavaPDA {
     }
 
     pub fn to_mocha_account(&self, wallets: &HashMap<String, LavaWallet>) -> String {
-        format!(
+        dbg!(&self.seeds);
+        return format!(
             "const {} = PublicKey.findProgramAddressSync([{}], {})[0]",
             self.name.to_case(Case::Snake),
             self.seeds
                 .iter()
                 .map(|s| {
+                    dbg!(s);
                     if let LavaSeed::PublicKey(p) = s {
                         if !wallets.contains_key(p) {
                             return s.to_mocha_account(true);
                         }
-                    }
+                    };
                     s.to_mocha_account(false)
                 })
                 .collect::<Vec<String>>()

@@ -29,23 +29,23 @@ import { Program, BN } from "@coral-xyz/anchor";
     // Accounts
     const maker = new Keypair();
 const taker = new Keypair();
-const token_a = new Keypair();
 const token_b = new Keypair();
+const token_a = new Keypair();
 const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.toBuffer(), new BN(1).toBuffer("le", 8)], anchor_escrow_2024)[0]
 const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
+const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
 const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const accountsPublicKeys = {
 maker: maker.publicKey,
 taker: taker.publicKey,
-token_a: token_a.publicKey,
 token_b: token_b.publicKey,
+token_a: token_a.publicKey,
 escrow,
 taker_ata_b,
+maker_ata_b,
 taker_ata_a,
-maker_ata_a,
-maker_ata_b
+maker_ata_a
 }
 
     it("setup", async() => {
@@ -59,7 +59,7 @@ maker_ata_b
                 await program.methods
                 .make(new BN(1), new BN(1000000), new BN(1000000))
                 .accounts({ ...accounts })
-                .signers([])
+.signers([maker])
                 .rpc()
                 .then(confirm)
                 .then(log);

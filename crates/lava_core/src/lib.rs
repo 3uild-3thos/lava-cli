@@ -387,6 +387,9 @@ impl LavaConfig {
                     .iter()
                     .find(|i| i.name == t.instruction)
                     .unwrap();
+                let signers = &instruction.accounts.iter().filter(|a| a.isSigner).collect::<Vec<&soda_sol::structs::InstructionAccount>>().iter().map(|a|a.name.clone()).collect::<Vec<String>>();
+
+                let signers_part= if signers.len() > 0 {format!("\n.signers([{}])", signers.join(", "))} else {"".to_owned()};
                 let binding = format!("{}", t.accounts).replace('"', "");
                 let mut accounts_to_chars = binding.chars();
                 accounts_to_chars.next();
@@ -411,8 +414,7 @@ impl LavaConfig {
                 const accounts = {{{}}}
                 await program.methods
                 .{}({})
-                .accounts({{ ...accounts }})
-                .signers([])
+                .accounts({{ ...accounts }}){}
                 .rpc()
                 .then(confirm)
                 .then(log);
@@ -424,16 +426,16 @@ impl LavaConfig {
                         .iter()
                         .enumerate()
                         .map(|(i, a)| {
-                            dbg!(a);
-                            return match &instruction.args[i].type_ {
+                            match &instruction.args[i].type_ {
                                 soda_sol::structs::InstructionType::U64 => {
                                     return format!("new BN({})", format!("{}", a).replace('"', ""))
                                 }
                                 _ => "null".to_string(),
-                            };
+                            }
                         })
                         .collect::<Vec<String>>()
-                        .join(", ")
+                        .join(", "),
+                    signers_part
                 );
             })
             .collect::<Vec<String>>()

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 
 use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
@@ -440,13 +440,46 @@ impl LavaConfig {
             })
             .collect::<Vec<String>>()
             .join("\n");
-
-        let setup = "";
+        let wallets_with_sol = self.wallets.iter().filter(|(_,wallet)| wallet.balance > 0);
+        let setup_wallets =  wallets_with_sol.clone().map(|(_,wallet)| format!(r#"SystemProgram.transfer({{
+            fromPubkey: provider.publicKey,
+            toPubkey: {}.publicKey,
+            lamports: {},
+          }})"#,wallet.name.to_case(Case::Snake), wallet.balance)).collect::<Vec<String>>().join(",\n");
+        let setup_mints = self.mints.iter().map(|(_,mint)| format!("SystemProgram.createAccount({{
+            fromPubkey: provider.publicKey,
+            newAccountPubkey: {}.publicKey,
+            lamports,
+            space: MINT_SIZE,
+            programId: TOKEN_PROGRAM_ID,
+          }})", mint.name)).collect::<Vec<String>>().join(",\n");
+        let initializate_mints = self.mints.iter().map(|(_,mint)| format!("createInitializeMint2Instruction({}.publicKey, {}, {}.publicKey, null)", mint.name.to_case(Case::Snake), mint.decimals, mint.mint_authority)).collect::<Vec<String>>().join(",\n");
+        let idempotent = self.atas.iter().map(|(_,ata)| format!("createAssociatedTokenAccountIdempotentInstruction({}.publicKey, {}.publicKey, {}.publicKey, {})", ata.name.to_case(Case::Snake), ata.authority.to_case(Case::Snake), ata.mint.to_case(Case::Snake), ata.amount)).collect::<Vec<String>>().join(",\n");
+        let mint_to_instructions = self.atas.iter().map(|(_,ata)| format!("createMintToInstruction({}.publicKey, {}.publicKey, {}.publicKey, {}, {})", ata.name.to_case(Case::Snake), ata.authority.to_case(Case::Snake), ata.mint.to_case(Case::Snake), ata.amount, ata.amount)).collect::<Vec<String>>().join(",\n");
+        let setup = format!("{},\n{},\n{},\n{},\n{}",setup_wallets, setup_mints, initializate_mints, idempotent, mint_to_instructions);
 
         format!(
             r#"
 import * as anchor from "@coral-xyz/anchor";
 import {{ Program, BN }} from "@coral-xyz/anchor";
+import {{
+    Keypair,
+    LAMPORTS_PER_SOL,
+    PublicKey,
+    SystemProgram,
+    Transaction,
+  }} from "@solana/web3.js";
+  import {{
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    MINT_SIZE,
+    TOKEN_PROGRAM_ID,
+    createAssociatedTokenAccountIdempotentInstruction,
+    createInitializeMint2Instruction,
+    createMintToInstruction,
+    getAssociatedTokenAddressSync,
+    getMinimumBalanceForRentExemptMint,
+  }} from "@solana/spl-token";
+
     describe("{}", () => {{
         anchor.setProvider(anchor.AnchorProvider.env());
 
@@ -476,14 +509,17 @@ import {{ Program, BN }} from "@coral-xyz/anchor";
     {}
 
     it("setup", async() => {{
+        let lamports = await getMinimumBalanceForRentExemptMint(connection);
+        let tx = new Transaction();
         let instructions = [
             {}
         ];
+        await provider.sendAndConfirm(tx, [{}]).then(log);
     }})
 
     {}
 }})"#,
-            self.name, accounts_part, setup, user_defined_tests
+            self.name, accounts_part, setup, format!("{}, {}",self.mints.iter().map(|(_,m)|m.name.clone().to_case(Case::Snake)).collect::<Vec<String>>().join(", ") ,wallets_with_sol.map(|(_,w)|w.name.clone().to_case(Case::Snake)).collect::<Vec<String>>().join(", ")), user_defined_tests
         )
         // wallets, airdrops, tokens, atas, mints)
     }

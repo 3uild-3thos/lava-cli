@@ -326,6 +326,25 @@ impl LavaConfig {
     pub fn to_mocha(&self) -> String {
         let mut accounts: Vec<String> = vec![];
 
+        let mut import_program_types = "".to_string();
+        // format!(r#"import {{ {} }} from "../target/types/{}";"#,,);
+        let mut declare_programs ="".to_string();
+        //"const program = anchor.workspace.{} as Program<{}>;"; 
+        self.idls.iter().for_each(|idl| {
+            let program_name = idl.name.to_case(Case::Snake);
+            let program_type = idl.name.to_case(Case::Pascal);
+            let program_import = format!(
+                r#"import {{ {} }} from "../target/types/{}";"#,
+                program_type, program_name
+            );
+            let program_definition = format!(
+                r#"const program = anchor.workspace.{} as Program<{}>;"#,
+                program_type, program_type
+            );
+            import_program_types=[import_program_types.clone(),program_import].join("\n");
+            declare_programs=[declare_programs.clone(),program_definition].join("\n");
+        });
+
         let accounts_declarations: String = vec![
             // TODO: Add setup for multiple programs
             // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
@@ -523,6 +542,7 @@ import {{
     getAssociatedTokenAddressSync,
     getMinimumBalanceForRentExemptMint,
   }} from "@solana/spl-token";
+  {}
 
     describe("{}", () => {{
         anchor.setProvider(anchor.AnchorProvider.env());
@@ -531,7 +551,7 @@ import {{
 
         const connection = provider.connection;
 
-        const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
+{}
 
         const confirm = async (signature: string): Promise<string> => {{
             const block = await connection.getLatestBlockhash();
@@ -563,7 +583,7 @@ import {{
 
     {}
 }})"#,
-            self.name,
+            import_program_types,self.name, declare_programs,
             accounts_part,
             setup,
             format!(

@@ -18,6 +18,8 @@ import {
     getAssociatedTokenAddressSync,
     getMinimumBalanceForRentExemptMint,
   } from "@solana/spl-token";
+  
+import { AnchorEscrow2024 } from "../target/types/anchor_escrow_2024";
 
     describe("Escrow", () => {
         anchor.setProvider(anchor.AnchorProvider.env());
@@ -26,7 +28,8 @@ import {
 
         const connection = provider.connection;
 
-        const program = anchor.workspace.AnchorEscrow as Program<AnchorEscrow>;
+
+const program = anchor.workspace.AnchorEscrow2024 as Program<AnchorEscrow2024>;
 
         const confirm = async (signature: string): Promise<string> => {
             const block = await connection.getLatestBlockhash();
@@ -47,23 +50,23 @@ import {
     // Accounts
     const maker = new Keypair();
 const taker = new Keypair();
-const token_b = new Keypair();
 const token_a = new Keypair();
+const token_b = new Keypair();
 const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.toBuffer(), new BN(1).toBuffer("le", 8)], anchor_escrow_2024)[0]
-const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
-const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
-const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
+const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
+const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
+const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
 const accountsPublicKeys = {
 maker: maker.publicKey,
 taker: taker.publicKey,
-token_b: token_b.publicKey,
 token_a: token_a.publicKey,
+token_b: token_b.publicKey,
 escrow,
+maker_ata_b,
 maker_ata_a,
-taker_ata_a,
 taker_ata_b,
-maker_ata_b
+taker_ata_a
 }
 
     it("setup", async() => {
@@ -82,14 +85,14 @@ SystemProgram.transfer({
           }),
 SystemProgram.createAccount({
             fromPubkey: provider.publicKey,
-            newAccountPubkey: token_b.publicKey,
+            newAccountPubkey: token_a.publicKey,
             lamports,
             space: MINT_SIZE,
             programId: TOKEN_PROGRAM_ID,
           }),
 SystemProgram.createAccount({
             fromPubkey: provider.publicKey,
-            newAccountPubkey: token_a.publicKey,
+            newAccountPubkey: token_b.publicKey,
             lamports,
             space: MINT_SIZE,
             programId: TOKEN_PROGRAM_ID,
@@ -111,7 +114,7 @@ createInitializeMint2Instruction(
 createAssociatedTokenAccountIdempotentInstruction(provider.publicKey, taker_ata_b, taker.publicKey, token_b.publicKey),
 createMintToInstruction(token_b.publicKey, taker_ata_b, taker.publicKey, 1000000000)
         ];
-        await provider.sendAndConfirm(tx, [token_b, token_a, maker, taker]).then(log);
+        await provider.sendAndConfirm(tx, [token_a, token_b, maker, taker]).then(log);
     })
 
     it("Make", async() => {

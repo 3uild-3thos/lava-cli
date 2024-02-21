@@ -24,7 +24,7 @@
       "kind": "mint"
     },
     {
-      "name": "anchor_escrow_2024",
+      "name": "anchor_escrow",
       "kind": "program"
     },
     {
@@ -81,13 +81,13 @@
         }
       ],
       "kind": "pda",
-      "program": "anchor_escrow_2024"
+      "program": "anchor_escrow"
     }
   ],
   "tests": [
     {
       "name": "Make",
-      "programId": "anchor_escrow_2024",
+      "programId": "anchor_escrow",
       "instruction": "make",
       "accounts": {
         "maker": "Maker",
@@ -110,7 +110,7 @@
   "idls": [
     {
       "version": "0.1.0",
-      "name": "anchor_escrow_2024",
+      "name": "anchor_escrow",
       "instructions": [
         {
           "name": "make",

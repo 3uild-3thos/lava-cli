@@ -109,7 +109,7 @@ impl LavaATA {
     fn to_mocha_account(&self, pda_owner: bool) -> String {
         if pda_owner {
             format!(
-                "const {} = getAssociatedTokenAddressSync({}.publicKey, {});",
+                "const {} = getAssociatedTokenAddressSync({}.publicKey, {}, true);",
                 self.name.to_case(Case::Snake),
                 self.mint.to_case(Case::Snake),
                 self.authority.to_case(Case::Snake)

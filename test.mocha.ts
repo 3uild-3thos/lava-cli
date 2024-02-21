@@ -48,40 +48,47 @@ const program = anchor.workspace.AnchorEscrow2024 as Program<AnchorEscrow2024>;
     };
 
     // Accounts
-    const maker = new Keypair();
-const taker = new Keypair();
-const token_a = new Keypair();
-const token_b = new Keypair();
-const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.toBuffer(), new BN(1).toBuffer("le", 8)], anchor_escrow_2024)[0]
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
+    const taker = Keypair.generate();
+const maker = Keypair.generate();
+const token_a = Keypair.generate();
+const token_b = Keypair.generate();
+const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.publicKey.toBuffer(), new BN(1).toBuffer("le", 8)], program.programId)[0]
+const vault = getAssociatedTokenAddressSync(token_a.publicKey, escrow);
+const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
 const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
 const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
-const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
+const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const accountsPublicKeys = {
-maker: maker.publicKey,
 taker: taker.publicKey,
+maker: maker.publicKey,
 token_a: token_a.publicKey,
 token_b: token_b.publicKey,
 escrow,
-maker_ata_b,
+vault,
+taker_ata_a,
 maker_ata_a,
 taker_ata_b,
-taker_ata_a
+maker_ata_b,
+associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
+
+                tokenProgram: TOKEN_PROGRAM_ID,
+
+                systemProgram: SystemProgram.programId
 }
 
     it("setup", async() => {
         let lamports = await getMinimumBalanceForRentExemptMint(connection);
         let tx = new Transaction();
-        let instructions = [
+        tx.instructions = [
             SystemProgram.transfer({
             fromPubkey: provider.publicKey,
-            toPubkey: maker.publicKey,
-            lamports: 10,
+            toPubkey: taker.publicKey,
+            lamports: 10 * LAMPORTS_PER_SOL,
           }),
 SystemProgram.transfer({
             fromPubkey: provider.publicKey,
-            toPubkey: taker.publicKey,
-            lamports: 10,
+            toPubkey: maker.publicKey,
+            lamports: 10 * LAMPORTS_PER_SOL,
           }),
 SystemProgram.createAccount({
             fromPubkey: provider.publicKey,
@@ -114,11 +121,11 @@ createInitializeMint2Instruction(
 createAssociatedTokenAccountIdempotentInstruction(provider.publicKey, taker_ata_b, taker.publicKey, token_b.publicKey),
 createMintToInstruction(token_b.publicKey, taker_ata_b, taker.publicKey, 1000000000)
         ];
-        await provider.sendAndConfirm(tx, [token_a, token_b, maker, taker]).then(log);
+        await provider.sendAndConfirm(tx, [token_a, token_b, taker, maker]).then(log);
     })
 
     it("Make", async() => {
-                const accounts = {associatedTokenProgram: accountsPublicKeys[associated_token_program], escrow: accountsPublicKeys[escrow], maker: accountsPublicKeys[maker], makerAtaA: accountsPublicKeys[maker_ata_a], mintA: accountsPublicKeys[token_a], mintB: accountsPublicKeys[token_b], systemProgram: accountsPublicKeys[system_program], tokenProgram: accountsPublicKeys[token_program], vault: accountsPublicKeys[vault]}
+                const accounts = {associatedTokenProgram: accountsPublicKeys["associated_token_program"], escrow: accountsPublicKeys["escrow"], maker: accountsPublicKeys["maker"], makerAtaA: accountsPublicKeys["maker_ata_a"], mintA: accountsPublicKeys["token_a"], mintB: accountsPublicKeys["token_b"], systemProgram: accountsPublicKeys["system_program"], tokenProgram: accountsPublicKeys["token_program"], vault: accountsPublicKeys["vault"]}
                 await program.methods
                 .make(new BN(1), new BN(1000000), new BN(1000000))
                 .accounts({ ...accounts })

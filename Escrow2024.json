@@ -43,6 +43,14 @@
       "kind": "ata"
     },
     {
+      "amount": 0,
+      "name": "vault",
+      "authority": "Escrow",
+      "mint": "TokenA",
+      "init": true,
+      "kind": "ata"
+    },
+    {
       "amount": 1000000000,
       "name": "Taker ATA B",
       "authority": "Taker",

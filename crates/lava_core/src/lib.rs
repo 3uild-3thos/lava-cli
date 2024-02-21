@@ -44,7 +44,7 @@ pub struct LavaWallet {
 
 impl LavaWallet {
     fn to_mocha_account(&self) -> String {
-        format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+        format!("const {} = Keypair.generate();", self.name.to_case(Case::Snake))
     }
     fn to_key_value(&self) -> String {
         format!(
@@ -76,7 +76,7 @@ pub struct LavaMint {
 
 impl LavaMint {
     fn to_mocha_account(&self) -> String {
-        format!("const {} = new Keypair();", self.name.to_case(Case::Snake))
+        format!("const {} = Keypair.generate();", self.name.to_case(Case::Snake))
     }
     fn to_key_value(&self) -> String {
         format!(
@@ -101,6 +101,8 @@ pub struct LavaATA {
     authority: String,
     mint: String,
     amount: u64,
+    #[serde(default)]
+    init: bool,
 }
 
 impl LavaATA {
@@ -152,7 +154,6 @@ impl LavaPDA {
         let lss: LavaPDAJSON =
             serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
         let mut seeds = vec![];
-        dbg!(&lss.seeds);
         seeds = lss
             .seeds
             .iter()
@@ -205,16 +206,14 @@ impl LavaPDA {
     }
 
     pub fn to_mocha_account(&self, wallets: &HashMap<String, LavaWallet>) -> String {
-        dbg!(&self.seeds);
-        return format!(
+        format!(
             "const {} = PublicKey.findProgramAddressSync([{}], {})[0]",
             self.name.to_case(Case::Snake),
             self.seeds
                 .iter()
                 .map(|s| {
-                    dbg!(s);
                     if let LavaSeed::PublicKey(p) = s {
-                        if !wallets.contains_key(p) {
+                        if wallets.contains_key(p) {
                             return s.to_mocha_account(true);
                         }
                     };
@@ -222,8 +221,8 @@ impl LavaPDA {
                 })
                 .collect::<Vec<String>>()
                 .join(", "),
-            self.program.to_case(Case::Snake)
-        );
+                "program.programId"
+        )
     }
 
     fn to_key_value(&self) -> String {
@@ -390,8 +389,10 @@ impl LavaConfig {
             "{}\n{}",
             accounts_declarations,
             format!(
-                "const accountsPublicKeys = {{\n{}\n}}",
-                accounts.join(",\n")
+                "const accountsPublicKeys = {{\n{},\nassociatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,\n
+                tokenProgram: TOKEN_PROGRAM_ID,\n
+                systemProgram: SystemProgram.programId\n}}",
+                accounts.join(",\n"),
             )
         );
 
@@ -431,7 +432,7 @@ impl LavaConfig {
                         let key = key_value[0];
                         let value = key_value[1];
                         return format!(
-                            "{}: accountsPublicKeys[{}]",
+                            r#"{}: accountsPublicKeys["{}"]"#,
                             key,
                             value.to_case(Case::Snake)
                         );
@@ -477,7 +478,7 @@ impl LavaConfig {
                     r#"SystemProgram.transfer({{
             fromPubkey: provider.publicKey,
             toPubkey: {}.publicKey,
-            lamports: {},
+            lamports: {} * LAMPORTS_PER_SOL,
           }})"#,
                     wallet.name.to_case(Case::Snake),
                     wallet.balance
@@ -503,7 +504,7 @@ impl LavaConfig {
             .collect::<Vec<String>>()
             .join(",\n");
         
-        let mint_instructions = self.atas.iter().filter(|(_, ata)| ata.amount>0).map(|(_, ata)| {
+        let mint_instructions = self.atas.iter().filter(|(_, ata)| ata.amount > 0 ).map(|(_, ata)| {
             [format!(
                 r#"createInitializeMint2Instruction(
             {}.publicKey,
@@ -575,7 +576,7 @@ import {{
     it("setup", async() => {{
         let lamports = await getMinimumBalanceForRentExemptMint(connection);
         let tx = new Transaction();
-        let instructions = [
+        tx.instructions = [
             {}
         ];
         await provider.sendAndConfirm(tx, [{}]).then(log);

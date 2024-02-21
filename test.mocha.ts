@@ -53,22 +53,22 @@ const maker = Keypair.generate();
 const token_a = Keypair.generate();
 const token_b = Keypair.generate();
 const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.publicKey.toBuffer(), new BN(1).toBuffer("le", 8)], program.programId)[0]
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
-const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
 const vault = getAssociatedTokenAddressSync(token_a.publicKey, escrow, true);
-const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
+const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
 const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
+const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
+const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const accountsPublicKeys = {
 taker: taker.publicKey,
 maker: maker.publicKey,
 token_a: token_a.publicKey,
 token_b: token_b.publicKey,
 escrow,
-maker_ata_b,
-maker_ata_a,
 vault,
-taker_ata_b,
+maker_ata_a,
 taker_ata_a,
+taker_ata_b,
+maker_ata_b,
 associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
 
                 tokenProgram: TOKEN_PROGRAM_ID,

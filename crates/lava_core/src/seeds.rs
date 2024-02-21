@@ -1,9 +1,5 @@
-use std::str::FromStr;
-
 use convert_case::{Case, Casing};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
-
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum LavaSeed {
@@ -18,7 +14,7 @@ pub enum LavaSeed {
     I64(i64),
     USize(usize),
     ISize(isize),
-    PublicKey(String)
+    PublicKey(String),
 }
 
 impl LavaSeed {
@@ -33,7 +29,7 @@ impl LavaSeed {
             LavaSeed::I32(n) => format!("new BN({}).toBuffer(\"le\", 4)", n),
             LavaSeed::U64(n) => format!("new BN({}).toBuffer(\"le\", 8)", n),
             LavaSeed::I64(n) => format!("new BN({}).toBuffer(\"le\", 8)", n),
-            // TODO: Handle encoding properly based upon size of the usize 
+            // TODO: Handle encoding properly based upon size of the usize
             LavaSeed::USize(n) => format!("new BN({}).toBuffer(\"le\", 8)", n),
             LavaSeed::ISize(n) => format!("new BN({}).toBuffer(\"le\", 8)", n),
             LavaSeed::PublicKey(n) => {

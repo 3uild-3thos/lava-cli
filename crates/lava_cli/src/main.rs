@@ -1,10 +1,9 @@
-
 // use clap::{Arg};
 // use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::{Read, Write};
 use clap::Parser;
 use lava_core::LavaConfig;
+use std::fs::File;
+use std::io::Write;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -31,7 +30,7 @@ fn main() {
 
 fn read_and_parse_json(file_path: &str, out_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Open and read the YAML file
-    let mut file = File::open(file_path)?;
+    let file = File::open(file_path)?;
 
     // Parse JSON into your Config struct
     let config: LavaConfig = serde_json::from_reader(file)?;

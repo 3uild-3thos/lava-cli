@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 
 use anyhow::{Error, Result};
 use convert_case::{Case, Casing};
@@ -44,7 +44,10 @@ pub struct LavaWallet {
 
 impl LavaWallet {
     fn to_mocha_account(&self) -> String {
-        format!("const {} = Keypair.generate();", self.name.to_case(Case::Snake))
+        format!(
+            "const {} = Keypair.generate();",
+            self.name.to_case(Case::Snake)
+        )
     }
     fn to_key_value(&self) -> String {
         format!(
@@ -76,7 +79,10 @@ pub struct LavaMint {
 
 impl LavaMint {
     fn to_mocha_account(&self) -> String {
-        format!("const {} = Keypair.generate();", self.name.to_case(Case::Snake))
+        format!(
+            "const {} = Keypair.generate();",
+            self.name.to_case(Case::Snake)
+        )
     }
     fn to_key_value(&self) -> String {
         format!(
@@ -194,7 +200,7 @@ impl LavaPDA {
                         .ok_or(Error::msg("Invalid Public Key"))?
                         .to_string(),
                 )),
-                _ => return Err(Error::msg("Unsupported PDA seed type")),
+                _ => Err(Error::msg("Unsupported PDA seed type")),
             })
             .collect::<Result<Vec<LavaSeed>, Error>>()?;
 
@@ -221,7 +227,7 @@ impl LavaPDA {
                 })
                 .collect::<Vec<String>>()
                 .join(", "),
-                "program.programId"
+            "program.programId"
         )
     }
 
@@ -247,7 +253,7 @@ impl TryFrom<&str> for LavaConfig {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Error> {
-        let config: LavaConfig = serde_json::from_str(&value)?;
+        let config: LavaConfig = serde_json::from_str(value)?;
         config.check()?;
         Ok(config)
     }
@@ -295,7 +301,7 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
                     atas.insert(name.to_string(), ata);
                 }
                 _ => {
-                    println!("Not implemented: {}", v.get("kind").unwrap().to_string());
+                    println!("Not implemented: {}", v.get("kind").unwrap());
                 }
             }
         }
@@ -327,8 +333,8 @@ impl LavaConfig {
 
         let mut import_program_types = "".to_string();
         // format!(r#"import {{ {} }} from "../target/types/{}";"#,,);
-        let mut declare_programs ="".to_string();
-        //"const program = anchor.workspace.{} as Program<{}>;"; 
+        let mut declare_programs = "".to_string();
+        //"const program = anchor.workspace.{} as Program<{}>;";
         self.idls.iter().for_each(|idl| {
             let program_name = idl.name.to_case(Case::Snake);
             let program_type = idl.name.to_case(Case::Pascal);
@@ -340,40 +346,38 @@ impl LavaConfig {
                 r#"const program = anchor.workspace.{} as Program<{}>;"#,
                 program_type, program_type
             );
-            import_program_types=[import_program_types.clone(),program_import].join("\n");
-            declare_programs=[declare_programs.clone(),program_definition].join("\n");
+            import_program_types = [import_program_types.clone(), program_import].join("\n");
+            declare_programs = [declare_programs.clone(), program_definition].join("\n");
         });
 
-        let accounts_declarations: String = vec![
-            // TODO: Add setup for multiple programs
-            // self.programs.iter().map(|(_,p)| p.to_mocha_account()).collect::<Vec<String>>().join("\n"),
+        let accounts_declarations: String = [
             self.wallets
-                .iter()
-                .map(|(_, w)| {
+                .values()
+                .map(|w| {
                     accounts.push(w.to_key_value());
-                    return w.to_mocha_account();
+                    w.to_mocha_account()
                 })
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.mints
-                .iter()
-                .map(|(_, m)| {
+                .values()
+                .map(|m| {
                     accounts.push(m.to_key_value());
-                    return m.to_mocha_account();
+                    m.to_mocha_account()
                 })
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.pdas
-                .iter()
-                .map(|(_, p)| {
+                .values()
+                .map(|p| {
                     accounts.push(p.to_key_value());
-                    return p.to_mocha_account(&self.wallets);
+                    p.to_mocha_account(&self.wallets)
                 })
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.atas
-                .iter()
-                .map(|(_, a)| {
+                .values()
+                .map(|a| {
                     accounts.push(a.to_key_value());
                     if !self.wallets.contains_key(&a.authority) {
                         a.to_mocha_account(true)
@@ -415,7 +419,7 @@ impl LavaConfig {
                     .map(|a| a.name.clone())
                     .collect::<Vec<String>>();
 
-                let signers_part = if signers.len() > 0 {
+                let signers_part = if !signers.is_empty() {
                     format!("\n.signers([{}])", signers.join(", "))
                 } else {
                     "".to_owned()
@@ -431,15 +435,15 @@ impl LavaConfig {
                         let key_value = pair.split(':').collect::<Vec<&str>>();
                         let key = key_value[0];
                         let value = key_value[1];
-                        return format!(
+                        format!(
                             r#"{}: accountsPublicKeys["{}"]"#,
                             key,
                             value.to_case(Case::Snake)
-                        );
+                        )
                     })
                     .collect::<Vec<String>>()
                     .join(", ");
-                return format!(
+                format!(
                     r#"it("{}", async() => {{
                 const accounts = {{{}}}
                 await program.methods
@@ -458,7 +462,7 @@ impl LavaConfig {
                         .map(|(i, a)| {
                             match &instruction.args[i].type_ {
                                 soda_sol::structs::InstructionType::U64 => {
-                                    return format!("new BN({})", format!("{}", a).replace('"', ""))
+                                    format!("new BN({})", format!("{}", a).replace('"', ""))
                                 }
                                 _ => "null".to_string(),
                             }
@@ -466,7 +470,7 @@ impl LavaConfig {
                         .collect::<Vec<String>>()
                         .join(", "),
                     signers_part
-                );
+                )
             })
             .collect::<Vec<String>>()
             .join("\n");
@@ -488,8 +492,8 @@ impl LavaConfig {
             .join(",\n");
         let setup_mints = self
             .mints
-            .iter()
-            .map(|(_, mint)| {
+            .values()
+            .map(|mint| {
                 format!(
                     "SystemProgram.createAccount({{
             fromPubkey: provider.publicKey,
@@ -503,7 +507,7 @@ impl LavaConfig {
             })
             .collect::<Vec<String>>()
             .join(",\n");
-        
+
         let mint_instructions = self.atas.iter().filter(|(_, ata)| ata.amount > 0 ).map(|(_, ata)| {
             [format!(
                 r#"createInitializeMint2Instruction(
@@ -518,9 +522,7 @@ impl LavaConfig {
             format!("createMintToInstruction({}.publicKey, {}, {}.publicKey, {})", ata.mint.to_case(Case::Snake), ata.name.to_case(Case::Snake), ata.authority.to_case(Case::Snake), ata.amount)
                 ].join(",\n")
         }).collect::<Vec<String>>().join(",\n");
-        let setup = [
-            setup_wallets, setup_mints, mint_instructions
-        ].join(",\n");
+        let setup = [setup_wallets, setup_mints, mint_instructions].join(",\n");
 
         format!(
             r#"
@@ -584,14 +586,16 @@ import {{
 
     {}
 }})"#,
-            import_program_types,self.name, declare_programs,
+            import_program_types,
+            self.name,
+            declare_programs,
             accounts_part,
             setup,
             format!(
                 "{}, {}",
                 self.mints
-                    .iter()
-                    .map(|(_, m)| m.name.clone().to_case(Case::Snake))
+                    .values()
+                    .map(|m| m.name.clone().to_case(Case::Snake))
                     .collect::<Vec<String>>()
                     .join(", "),
                 wallets_with_sol
@@ -771,7 +775,7 @@ mod tests {
         let config = LavaConfig::try_from(&lava_config_json).unwrap();
         let mocha = config.to_mocha();
         let mut tests = File::create("../../test.mocha.ts").unwrap();
-        tests.write_all(&mocha.as_bytes()).unwrap();
+        tests.write_all(mocha.as_bytes()).unwrap();
         //   println!("{}", mocha);
     }
 }

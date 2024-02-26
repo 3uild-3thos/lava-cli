@@ -322,6 +322,32 @@ impl TryFrom<&LavaConfigJSON> for LavaConfig {
 
 #[wasm_bindgen]
 impl LavaConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new(lava_Config: Option<String>) -> Result<LavaConfig, JsError> {
+        match lava_Config {
+            Some(config) => match LavaConfig::try_from(config.as_str()) {
+                Ok(config) => Ok(config),
+                Err(e) => Err(JsError::new(&e.to_string()))
+            },
+            None => Ok(LavaConfig{
+                name: "Lava".to_string(),
+                wallets: HashMap::new(),
+                mints: HashMap::new(),
+                atas: HashMap::new(),
+                programs: HashMap::new(),
+                pdas: HashMap::new(),
+                tests: vec![],
+                idls: vec![],
+            }),
+            
+        }
+        
+    }
+}
+
+
+#[wasm_bindgen]
+impl LavaConfig {
     fn check(&self) -> Result<()> {
         // TODO: Make this actually check our Schema for problems
         Ok(())
@@ -757,6 +783,13 @@ pub struct Instruction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     address: Option<String>,
+}
+
+#[wasm_bindgen]
+pub fn json_to_mocka(json: &str) -> String {
+    let config: LavaConfigJSON = serde_json::from_str(json).unwrap();
+    let config = LavaConfig::try_from(&config).unwrap();
+    config.to_mocha()
 }
 
 #[cfg(test)]

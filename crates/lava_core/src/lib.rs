@@ -459,13 +459,18 @@ impl LavaConfig {
                     .split(',')
                     .map(|pair| {
                         let key_value = pair.split(':').collect::<Vec<&str>>();
-                        let key = key_value[0];
-                        let value = key_value[1];
-                        format!(
-                            r#"{}: accountsPublicKeys["{}"]"#,
-                            key,
-                            value.to_case(Case::Snake)
-                        )
+                        if key_value.len() > 1 {
+                            let key = key_value[0];
+                            let value = key_value[1];
+                            format!(
+                                r#"{}: accountsPublicKeys["{}"]"#,
+                                key,
+                                value.to_case(Case::Snake)
+                            )
+                        
+                        } else {
+                            "".to_string()
+                        }
                     })
                     .collect::<Vec<String>>()
                     .join(", ");

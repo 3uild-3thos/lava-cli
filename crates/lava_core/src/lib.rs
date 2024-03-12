@@ -19,7 +19,7 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        let file_name = "../../Escrow2024.json";
+        let file_name = "../../workspaces_examples/Escrow2024-Make.json";
         let mut file = File::open(file_name).unwrap();
         let mut buffer = String::new();
         file.read_to_string(&mut buffer).unwrap();

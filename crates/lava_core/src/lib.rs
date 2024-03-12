@@ -159,8 +159,7 @@ impl LavaPDA {
     pub fn from_json(v: &[u8]) -> Result<Self, Error> {
         let lss: LavaPDAJSON =
             serde_json::from_slice(v).map_err(|_| Error::msg("Invalid PDA schema"))?;
-        let mut seeds = vec![];
-        seeds = lss
+        let seeds = lss
             .seeds
             .iter()
             .map(|s| match s.kind.as_str() {
@@ -327,9 +326,9 @@ impl LavaConfig {
         match lava_Config {
             Some(config) => match LavaConfig::try_from(config.as_str()) {
                 Ok(config) => Ok(config),
-                Err(e) => Err(JsError::new(&e.to_string()))
+                Err(e) => Err(JsError::new(&e.to_string())),
             },
-            None => Ok(LavaConfig{
+            None => Ok(LavaConfig {
                 name: "Lava".to_string(),
                 wallets: HashMap::new(),
                 mints: HashMap::new(),
@@ -339,12 +338,9 @@ impl LavaConfig {
                 tests: vec![],
                 idls: vec![],
             }),
-            
         }
-        
     }
 }
-
 
 #[wasm_bindgen]
 impl LavaConfig {
@@ -416,14 +412,14 @@ impl LavaConfig {
         ]
         .join("\n");
         let accounts_part = format!(
-            "{}\n{}",
+            r#"{}
+            const accountsPublicKeys = {{{},
+                associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId
+        }}"#,
             accounts_declarations,
-            format!(
-                "const accountsPublicKeys = {{\n{},\nassociatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,\n
-                tokenProgram: TOKEN_PROGRAM_ID,\n
-                systemProgram: SystemProgram.programId\n}}",
-                accounts.join(",\n"),
-            )
+            accounts.join(",\n"),
         );
 
         let user_defined_tests = self
@@ -467,44 +463,42 @@ impl LavaConfig {
                                 key,
                                 value.to_case(Case::Snake)
                             )
-                        
                         } else {
                             "".to_string()
                         }
                     })
                     .collect::<Vec<String>>()
                     .join(", ");
+
+                let arguments = t
+                    .args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| match &instruction.args[i].type_ {
+                        soda_sol::structs::InstructionType::U64 => {
+                            format!("new BN({})", format!("{}", a).replace('"', ""))
+                        }
+                        _ => "null".to_string(),
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                let instructions = t.instruction.clone();
+                let name = t.name.clone();
                 format!(
-                    r#"it("{}", async() => {{
-                const accounts = {{{}}}
+                    r#"it("{name}", async() => {{
+                const accounts = {{{account_display}}}
                 await program.methods
-                .{}({})
-                .accounts({{ ...accounts }}){}
+                .{instructions}({arguments})
+                .accounts({{ ...accounts }}){signers_part}
                 .rpc()
                 .then(confirm)
                 .then(log);
-            }});"#,
-                    t.name,
-                    account_display,
-                    t.instruction,
-                    t.args
-                        .iter()
-                        .enumerate()
-                        .map(|(i, a)| {
-                            match &instruction.args[i].type_ {
-                                soda_sol::structs::InstructionType::U64 => {
-                                    format!("new BN({})", format!("{}", a).replace('"', ""))
-                                }
-                                _ => "null".to_string(),
-                            }
-                        })
-                        .collect::<Vec<String>>()
-                        .join(", "),
-                    signers_part
+            }});"#
                 )
             })
             .collect::<Vec<String>>()
             .join("\n");
+
         let wallets_with_sol = self.wallets.iter().filter(|(_, wallet)| wallet.balance > 0);
         let setup_wallets = wallets_with_sol
             .clone()
@@ -554,6 +548,19 @@ impl LavaConfig {
                 ].join(",\n")
         }).collect::<Vec<String>>().join(",\n");
         let setup = [setup_wallets, setup_mints, mint_instructions].join(",\n");
+        let name = self.name.clone();
+        let instruction = [
+            self.mints
+                .values()
+                .map(|m| m.name.clone().to_case(Case::Snake))
+                .collect::<Vec<String>>()
+                .join(", "),
+            wallets_with_sol
+                .map(|(_, w)| w.name.clone().to_case(Case::Snake))
+                .collect::<Vec<String>>()
+                .join(", "),
+        ]
+        .join(", ");
 
         format!(
             r#"
@@ -576,16 +583,16 @@ import {{
     getAssociatedTokenAddressSync,
     getMinimumBalanceForRentExemptMint,
   }} from "@solana/spl-token";
-  {}
+  {import_program_types}
 
-    describe("{}", () => {{
+    describe("{name}", () => {{
         anchor.setProvider(anchor.AnchorProvider.env());
 
         const provider = anchor.getProvider();
 
         const connection = provider.connection;
 
-{}
+{declare_programs}
 
         const confirm = async (signature: string): Promise<string> => {{
             const block = await connection.getLatestBlockhash();
@@ -604,100 +611,21 @@ import {{
     }};
 
     // Accounts
-    {}
+    {accounts_part}
 
     it("setup", async() => {{
         let lamports = await getMinimumBalanceForRentExemptMint(connection);
         let tx = new Transaction();
         tx.instructions = [
-            {}
+            {setup}
         ];
-        await provider.sendAndConfirm(tx, [{}]).then(log);
+        await provider.sendAndConfirm(tx, [{instruction}]).then(log);
     }})
 
-    {}
-}})"#,
-            import_program_types,
-            self.name,
-            declare_programs,
-            accounts_part,
-            setup,
-            format!(
-                "{}, {}",
-                self.mints
-                    .values()
-                    .map(|m| m.name.clone().to_case(Case::Snake))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-                wallets_with_sol
-                    .map(|(_, w)| w.name.clone().to_case(Case::Snake))
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
-            user_defined_tests
+    {user_defined_tests}
+}})"#
         )
-        // wallets, airdrops, tokens, atas, mints)
     }
-
-    // fn mocha_generate_wallets(&self) -> String {
-    //     let mut wallets = vec!["lava_master_wallet".to_string()];
-    //     let mut keypairs = vec!["new Keypair()".to_string()];
-    //     self
-    //         .wallets
-    //         .clone()
-    //         .into_iter()
-    //         .for_each(|w| {
-    //             wallets.push(format!("lava_wallet_{}", &w));
-    //             keypairs.push(keypairs[0].clone());
-    //         });
-    //     format!("const [{}] = [{}]", wallets.join(", "), keypairs.join(", "))
-    // }
-
-    // fn mocha_generate_airdrops(&self) -> String {
-    //     let mut airdrops = vec!["anchor.getProvider().connection.requestAirdrop(lava_master_wallet.publicKey, 100_000_000_000).then(confirmTx)".to_string()];
-    //     self
-    //     .wallets
-    //     .clone()
-    //     .into_iter()
-    //     .for_each(|w| {
-    //         let sol_amount = match w.1.get("SOL") {
-    //             Some(a) => a.clone(),
-    //             None => 1_000_000_000
-    //         };
-    //         airdrops.push(format!("anchor.getProvider().connection.requestAirdrop(lava_wallet_{}.publicKey, {}).then(confirmTx)", &w.0, sol_amount))
-    //     });
-    //     format!("await Promise.all([\n{}\n])",
-    //         airdrops.join(",\n")
-    //     )
-    // }
-
-    // fn mocha_generate_tokens(&self) -> String {
-    //     // Make a mint for each token
-    //     if self.tokens.len() == 0 {
-    //         return "// No tokens defined".to_string();
-    //     }
-    //     let mut tokens = vec![];
-    //     self
-    //     .tokens
-    //     .clone()
-    //     .into_iter()
-    //     .for_each(|t| {
-    //         let authority = match t.1.authority {
-    //             Some(a) => format!("lava_wallet_{}", a),
-    //             None => "lava_master_wallet".to_string()
-    //         };
-    //         let decimals = t.1.decimals;
-    //         let freeze = match t.1.freeze {
-    //             Some(a) => format!("lava_wallet_{}.publicKey", a),
-    //             None => "null".to_string()
-    //         };
-    //         let ticker = t.0.clone();
-    //         tokens.push(format!("const mint_{} = await createMint(connection, {}, {}.publicKey, {}, {}).then(confirmTx)", &ticker.to_ascii_lowercase(), authority, authority, freeze, decimals))
-    //     });
-    //     format!("await Promise.all([\n{}\n])",
-    //         tokens.join(",\n")
-    //     )
-    // }
 }
 
 #[wasm_bindgen]
@@ -735,21 +663,6 @@ pub struct Field {
     #[serde(rename = "type")]
     field_type: String,
 }
-
-// #[wasm_bindgen]
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct LavaAccount {
-//     name: String,
-//     kind: String,
-//     initialize: Option<bool>,
-//     balance: Option<u64>,
-//     amount: Option<u64>,
-//     mint: Option<String>,
-//     mint_authority: Option<String>,
-//     freeze_authority: Option<String>,
-//     symbol: Option<String>,
-//     decimals: Option<u8>
-// }
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Serialize, Deserialize)]

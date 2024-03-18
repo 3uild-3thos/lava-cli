@@ -2,22 +2,22 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
 import {
-Keypair,
-LAMPORTS_PER_SOL,
-PublicKey,
-SystemProgram,
-Transaction,
-} from "@solana/web3.js";
+    Keypair,
+    LAMPORTS_PER_SOL,
+    PublicKey,
+    SystemProgram,
+    Transaction,
+    } from "@solana/web3.js";
 import {
-ASSOCIATED_TOKEN_PROGRAM_ID,
-MINT_SIZE,
-TOKEN_PROGRAM_ID,
-createAssociatedTokenAccountIdempotentInstruction,
-createInitializeMint2Instruction,
-createMintToInstruction,
-getAssociatedTokenAddressSync,
-getMinimumBalanceForRentExemptMint,
-} from "@solana/spl-token";
+                ASSOCIATED_TOKEN_PROGRAM_ID,
+                MINT_SIZE,
+                TOKEN_PROGRAM_ID,
+                createAssociatedTokenAccountIdempotentInstruction,
+                createInitializeMint2Instruction,
+                createMintToInstruction,
+                getAssociatedTokenAddressSync,
+                getMinimumBalanceForRentExemptMint,
+                } from "@solana/spl-token";
 
 import { AnchorEscrow } from "../target/types/anchor_escrow";
 
@@ -53,20 +53,20 @@ const taker = Keypair.generate();
 const token_a = Keypair.generate();
 const token_b = Keypair.generate();
 const escrow = PublicKey.findProgramAddressSync([Buffer.from("escrow", "utf-8"), maker.publicKey.toBuffer(), new BN(1).toBuffer("le", 8)], program.programId)[0]
-const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
-const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const vault = getAssociatedTokenAddressSync(token_a.publicKey, escrow, true);
+const maker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, maker.publicKey);
 const taker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, taker.publicKey);
+const taker_ata_b = getAssociatedTokenAddressSync(token_b.publicKey, taker.publicKey);
 const maker_ata_a = getAssociatedTokenAddressSync(token_a.publicKey, maker.publicKey);
         const accountsPublicKeys = {maker: maker.publicKey,
 taker: taker.publicKey,
 token_a: token_a.publicKey,
 token_b: token_b.publicKey,
 escrow,
-maker_ata_b,
-taker_ata_b,
 vault,
+maker_ata_b,
 taker_ata_a,
+taker_ata_b,
 maker_ata_a,
             associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
             tokenProgram: TOKEN_PROGRAM_ID,
@@ -76,18 +76,23 @@ maker_ata_a,
 it("setup", async() => {
     let lamports = await getMinimumBalanceForRentExemptMint(connection);
     let tx = new Transaction();
-    tx.instructions = [
-        SystemProgram.transfer({
-        fromPubkey: provider.publicKey,
-        toPubkey: maker.publicKey,
+    [ {
+        pubkey: maker.publicKey,
         lamports: 10 * LAMPORTS_PER_SOL,
-      }),
-SystemProgram.transfer({
-        fromPubkey: provider.publicKey,
-        toPubkey: taker.publicKey,
+      },
+{
+        pubkey: taker.publicKey,
         lamports: 10 * LAMPORTS_PER_SOL,
-      }),
-SystemProgram.createAccount({
+      } ].forEach(account => {
+        tx.add(SystemProgram.createAccount({
+            fromPubkey: provider.publicKey,
+            newAccountPubkey: account.pubkey,
+            lamports: account.lamports,
+            space: 0,
+            programId: SystemProgram.programId,
+        }));
+    });
+    [ SystemProgram.createAccount({
         fromPubkey: provider.publicKey,
         newAccountPubkey: token_a.publicKey,
         lamports,
@@ -116,8 +121,9 @@ createInitializeMint2Instruction(
         null
       ),
 createAssociatedTokenAccountIdempotentInstruction(provider.publicKey, maker_ata_a, maker.publicKey, token_a.publicKey),
-createMintToInstruction(token_a.publicKey, maker_ata_a, maker.publicKey, 1000000000)
-    ];
+createMintToInstruction(token_a.publicKey, maker_ata_a, maker.publicKey, 1000000000) ].forEach(instruction => {
+        tx.add(instruction);
+    });
     await provider.sendAndConfirm(tx, [token_a, token_b, maker, taker]).then(log);
 })
 

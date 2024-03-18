@@ -81,15 +81,43 @@ impl LavaConfig {
         ]
         .join("\n");
 
+        let import_spl = if self.tests.iter().any(|t| {
+            t.accounts
+                .as_object()
+                .unwrap()
+                .iter()
+                .any(|(k, v)| k == "tokenProgram")
+        }) {
+            r#"import {
+                ASSOCIATED_TOKEN_PROGRAM_ID,
+                MINT_SIZE,
+                TOKEN_PROGRAM_ID,
+                createAssociatedTokenAccountIdempotentInstruction,
+                createInitializeMint2Instruction,
+                createMintToInstruction,
+                getAssociatedTokenAddressSync,
+                getMinimumBalanceForRentExemptMint,
+                } from "@solana/spl-token";"#
+        } else {
+            ""
+        };
+
         let accounts_part = format!(
             r#"{}
         const accountsPublicKeys = {{{},
-            associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            tokenProgram: TOKEN_PROGRAM_ID,
+            {}
             systemProgram: SystemProgram.programId
     }}"#,
             accounts_declarations,
             accounts.join(",\n"),
+            if import_spl.is_empty() {
+                "".to_string()
+            } else {
+                format!(
+                    r#"associatedTokenprogram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            tokenProgram: TOKEN_PROGRAM_ID,"#
+                )
+            }
         );
 
         let user_defined_tests = self
@@ -174,11 +202,10 @@ impl LavaConfig {
             .clone()
             .map(|(_, wallet)| {
                 format!(
-                    r#"SystemProgram.transfer({{
-        fromPubkey: provider.publicKey,
-        toPubkey: {}.publicKey,
+                    r#"{{
+        pubkey: {}.publicKey,
         lamports: {} * LAMPORTS_PER_SOL,
-      }})"#,
+      }}"#,
                     wallet.name.to_case(Case::Snake),
                     wallet.balance
                 )
@@ -203,6 +230,12 @@ impl LavaConfig {
             .collect::<Vec<String>>()
             .join(",\n");
 
+        let rent_exception = if (!import_spl.is_empty()) {
+            "let lamports = await getMinimumBalanceForRentExemptMint(connection);"
+        } else {
+            ""
+        };
+
         let mint_instructions = self.atas.iter().filter(|(_, ata)| ata.amount > 0 ).map(|(_, ata)| {
             [format!(
                 r#"createInitializeMint2Instruction(
@@ -217,7 +250,7 @@ impl LavaConfig {
             format!("createMintToInstruction({}.publicKey, {}, {}.publicKey, {})", ata.mint.to_case(Case::Snake), ata.name.to_case(Case::Snake), ata.authority.to_case(Case::Snake), ata.amount)
                 ].join(",\n")
         }).collect::<Vec<String>>().join(",\n");
-        let setup = [setup_wallets, setup_mints, mint_instructions].join(",\n");
+        let setup = [setup_mints, mint_instructions].join(",\n");
         let name = self.name.clone();
         let instruction = [
             self.mints
@@ -230,6 +263,10 @@ impl LavaConfig {
                 .collect::<Vec<String>>()
                 .join(", "),
         ]
+        .iter()
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("{}", s))
+        .collect::<Vec<String>>()
         .join(", ");
 
         format!(
@@ -237,22 +274,13 @@ impl LavaConfig {
 import * as anchor from "@coral-xyz/anchor";
 import {{ Program, BN }} from "@coral-xyz/anchor";
 import {{
-Keypair,
-LAMPORTS_PER_SOL,
-PublicKey,
-SystemProgram,
-Transaction,
-}} from "@solana/web3.js";
-import {{
-ASSOCIATED_TOKEN_PROGRAM_ID,
-MINT_SIZE,
-TOKEN_PROGRAM_ID,
-createAssociatedTokenAccountIdempotentInstruction,
-createInitializeMint2Instruction,
-createMintToInstruction,
-getAssociatedTokenAddressSync,
-getMinimumBalanceForRentExemptMint,
-}} from "@solana/spl-token";
+    Keypair,
+    LAMPORTS_PER_SOL,
+    PublicKey,
+    SystemProgram,
+    Transaction,
+    }} from "@solana/web3.js";
+{import_spl}
 {import_program_types}
 
 describe("{name}", () => {{
@@ -284,11 +312,20 @@ const log = async (signature: string): Promise<string> => {{
 {accounts_part}
 
 it("setup", async() => {{
-    let lamports = await getMinimumBalanceForRentExemptMint(connection);
+    {rent_exception}
     let tx = new Transaction();
-    tx.instructions = [
-        {setup}
-    ];
+    [ {setup_wallets} ].forEach(account => {{
+        tx.add(SystemProgram.createAccount({{
+            fromPubkey: provider.publicKey,
+            newAccountPubkey: account.pubkey,
+            lamports: account.lamports,
+            space: 0,
+            programId: SystemProgram.programId,
+        }}));
+    }});
+    [ {setup} ].forEach(instruction => {{
+        tx.add(instruction);
+    }});
     await provider.sendAndConfirm(tx, [{instruction}]).then(log);
 }})
 
